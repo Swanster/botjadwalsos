@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Dashboard</h2>
+    <p class="subtitle">Overview jadwal standby hari ini</p>
+</div>
+
+<!-- Today's Overview -->
+<div class="cards-grid">
+    <div class="card card-primary">
+        <div class="card-header">
+            <h3>📅 Jadwal Hari Ini</h3>
+            <span class="date-badge">{{ today_str }}</span>
+        </div>
+        <div class="card-body">
+            {% if jadwal_hari_ini %}
+                <ul class="schedule-list">
+                    {% for j in jadwal_hari_ini %}
+                        <li>
+                            <span class="user-avatar">👤</span>
+                            <span class="user-name">{{ j.username }}</span>
+                            {% if j.telegram_username %}
+                                <span class="telegram-handle">@{{ j.telegram_username }}</span>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="empty-state">Tidak ada yang bertugas hari ini</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3>👥 Total Member</h3>
+        </div>
+        <div class="card-body stats-grid">
+            <div class="stat-item">
+                <span class="stat-value">{{ members_infra|length }}</span>
+                <span class="stat-label">INFRA</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">{{ members_ce|length }}</span>
+                <span class="stat-label">CE</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h3>⚙️ Kuota Saat Ini</h3>
+        </div>
+        <div class="card-body stats-grid">
+            <div class="stat-item">
+                <span class="stat-value">{{ settings.get('kuota_infra', {}).get('value', '2') }}</span>
+                <span class="stat-label">INFRA/hari</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value">{{ settings.get('kuota_ce', {}).get('value', '1') }}</span>
+                <span class="stat-label">CE/hari</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="section">
+    <h3 class="section-title">🚀 Quick Actions</h3>
+    <div class="button-group">
+        <a href="{{ url_for('schedules') }}" class="btn btn-secondary">📋 Input Jadwal Manual</a>
+        <a href="{{ url_for('members') }}" class="btn btn-secondary">👥 Kelola Member</a>
+        <a href="{{ url_for('settings') }}" class="btn btn-secondary">⚙️ Ubah Kuota</a>
+    </div>
+</div>
+
+<!-- Month Status -->
+{% if bulan_dibuka %}
+<div class="section">
+    <div class="info-banner">
+        <span class="info-icon">📆</span>
+        <span>Jadwal untuk bulan <strong>{{ bulan_dibuka.bulan }}/{{ bulan_dibuka.tahun }}</strong> sedang <strong>DIBUKA</strong></span>
+    </div>
+</div>
+{% endif %}
+
+<!-- Recent Schedule Summary -->
+<div class="section">
+    <h3 class="section-title">📊 Ringkasan Jadwal Bulan Ini</h3>
+    <div class="card">
+        <div class="card-body">
+            <p>Total jadwal terisi: <strong>{{ jadwal_bulan_ini|length }}</strong> slot</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

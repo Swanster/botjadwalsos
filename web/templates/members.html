@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Members{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>👥 Manajemen Members</h2>
+    <p class="subtitle">Kelola anggota tim INFRA dan CE</p>
+</div>
+
+<!-- Add Member Form -->
+<div class="card">
+    <div class="card-header">
+        <h3>➕ Tambah Member Baru</h3>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('add_member') }}" class="form-inline">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="user_id">User ID (Telegram)</label>
+                    <input type="text" id="user_id" name="user_id" placeholder="123456789" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="username">Nama</label>
+                    <input type="text" id="username" name="username" placeholder="Nama lengkap" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="telegram_username">Username Telegram</label>
+                    <input type="text" id="telegram_username" name="telegram_username" placeholder="username (tanpa @)">
+                </div>
+                
+                <div class="form-group">
+                    <label for="group_name">Grup</label>
+                    <select id="group_name" name="group_name" required>
+                        <option value="INFRA">INFRA</option>
+                        <option value="CE">CE</option>
+                    </select>
+                </div>
+                
+                <div class="form-group form-actions-inline">
+                    <button type="submit" class="btn btn-primary">➕ Tambah</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Members List -->
+<div class="members-grid">
+    <!-- INFRA Members -->
+    <div class="card">
+        <div class="card-header">
+            <h3>🔧 Tim INFRA</h3>
+            <span class="badge badge-infra">{{ members_infra|length }} anggota</span>
+        </div>
+        <div class="card-body">
+            {% if members_infra %}
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Nama</th>
+                            <th>Username</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in members_infra %}
+                        <tr id="row-infra-{{ m.user_id }}">
+                            <td><code>{{ m.user_id }}</code></td>
+                            <td id="name-infra-{{ m.user_id }}">{{ m.username or '-' }}</td>
+                            <td id="tg-infra-{{ m.user_id }}">{% if m.telegram_username %}@{{ m.telegram_username }}{% else %}-{% endif %}</td>
+                            <td class="actions-cell">
+                                <button type="button" class="btn btn-small btn-secondary" onclick="showEditForm('infra', {{ m.user_id }}, '{{ m.username|e }}', '{{ m.telegram_username|e }}', 'INFRA')">✏️</button>
+                                <form method="POST" action="{{ url_for('update_member', user_id=m.user_id) }}" class="inline-form">
+                                    <input type="hidden" name="username" value="{{ m.username }}">
+                                    <input type="hidden" name="telegram_username" value="{{ m.telegram_username }}">
+                                    <select name="group_name" onchange="this.form.submit()" class="select-small">
+                                        <option value="INFRA" selected>INFRA</option>
+                                        <option value="CE">CE</option>
+                                    </select>
+                                </form>
+                                <form method="POST" action="{{ url_for('delete_member', user_id=m.user_id) }}" class="inline-form">
+                                    <button type="submit" class="btn btn-small btn-danger" onclick="return confirm('Hapus member {{ m.username }}?')">🗑️</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <!-- Hidden edit row -->
+                        <tr id="edit-row-infra-{{ m.user_id }}" style="display: none;">
+                            <td><code>{{ m.user_id }}</code></td>
+                            <td colspan="3">
+                                <form method="POST" action="{{ url_for('update_member', user_id=m.user_id) }}" class="edit-inline-form">
+                                    <input type="text" name="username" value="{{ m.username }}" class="input-small" placeholder="Nama" required>
+                                    <input type="text" name="telegram_username" value="{{ m.telegram_username }}" class="input-small" placeholder="Username TG">
+                                    <input type="hidden" name="group_name" value="INFRA">
+                                    <button type="submit" class="btn btn-small btn-primary">💾 Simpan</button>
+                                    <button type="button" class="btn btn-small btn-secondary" onclick="hideEditForm('infra', {{ m.user_id }})">❌ Batal</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="empty-state">Belum ada anggota INFRA</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- CE Members -->
+    <div class="card">
+        <div class="card-header">
+            <h3>📞 Tim CE</h3>
+            <span class="badge badge-ce">{{ members_ce|length }} anggota</span>
+        </div>
+        <div class="card-body">
+            {% if members_ce %}
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>User ID</th>
+                            <th>Nama</th>
+                            <th>Username</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in members_ce %}
+                        <tr id="row-ce-{{ m.user_id }}">
+                            <td><code>{{ m.user_id }}</code></td>
+                            <td id="name-ce-{{ m.user_id }}">{{ m.username or '-' }}</td>
+                            <td id="tg-ce-{{ m.user_id }}">{% if m.telegram_username %}@{{ m.telegram_username }}{% else %}-{% endif %}</td>
+                            <td class="actions-cell">
+                                <button type="button" class="btn btn-small btn-secondary" onclick="showEditForm('ce', {{ m.user_id }}, '{{ m.username|e }}', '{{ m.telegram_username|e }}', 'CE')">✏️</button>
+                                <form method="POST" action="{{ url_for('update_member', user_id=m.user_id) }}" class="inline-form">
+                                    <input type="hidden" name="username" value="{{ m.username }}">
+                                    <input type="hidden" name="telegram_username" value="{{ m.telegram_username }}">
+                                    <select name="group_name" onchange="this.form.submit()" class="select-small">
+                                        <option value="INFRA">INFRA</option>
+                                        <option value="CE" selected>CE</option>
+                                    </select>
+                                </form>
+                                <form method="POST" action="{{ url_for('delete_member', user_id=m.user_id) }}" class="inline-form">
+                                    <button type="submit" class="btn btn-small btn-danger" onclick="return confirm('Hapus member {{ m.username }}?')">🗑️</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <!-- Hidden edit row -->
+                        <tr id="edit-row-ce-{{ m.user_id }}" style="display: none;">
+                            <td><code>{{ m.user_id }}</code></td>
+                            <td colspan="3">
+                                <form method="POST" action="{{ url_for('update_member', user_id=m.user_id) }}" class="edit-inline-form">
+                                    <input type="text" name="username" value="{{ m.username }}" class="input-small" placeholder="Nama" required>
+                                    <input type="text" name="telegram_username" value="{{ m.telegram_username }}" class="input-small" placeholder="Username TG">
+                                    <input type="hidden" name="group_name" value="CE">
+                                    <button type="submit" class="btn btn-small btn-primary">💾 Simpan</button>
+                                    <button type="button" class="btn btn-small btn-secondary" onclick="hideEditForm('ce', {{ m.user_id }})">❌ Batal</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="empty-state">Belum ada anggota CE</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="info-banner info-banner-note">
+    <span class="info-icon">💡</span>
+    <span>User ID dapat dilihat dengan command <code>/start</code> di bot atau menggunakan bot @userinfobot di Telegram.</span>
+</div>
+
+<script>
+function showEditForm(group, userId) {
+    document.getElementById('row-' + group + '-' + userId).style.display = 'none';
+    document.getElementById('edit-row-' + group + '-' + userId).style.display = 'table-row';
+}
+
+function hideEditForm(group, userId) {
+    document.getElementById('row-' + group + '-' + userId).style.display = 'table-row';
+    document.getElementById('edit-row-' + group + '-' + userId).style.display = 'none';
+}
+</script>
+{% endblock %}
+

@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# Database
+*.db
+
+# Logs
+*.log
+log_*.txt
+
+# Credentials and secrets
+credentials.json
+token.json
+config.py
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Archives
+*.zip
+
+# Virtual environment
+venv/
+ENV/

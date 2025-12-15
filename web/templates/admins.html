@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Admin Users{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>🔐 Admin Users</h2>
+    <p class="subtitle">Kelola akun admin dashboard</p>
+</div>
+
+<!-- Add Admin Form -->
+<div class="card">
+    <div class="card-header">
+        <h3>➕ Tambah Admin Baru</h3>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('add_admin') }}" class="form-inline">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required placeholder="username">
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required minlength="6" placeholder="min 6 karakter">
+                </div>
+                
+                <div class="form-group form-actions-inline">
+                    <button type="submit" class="btn btn-primary">➕ Tambah Admin</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Admin List -->
+<div class="card">
+    <div class="card-header">
+        <h3>📋 Daftar Admin</h3>
+    </div>
+    <div class="card-body">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Dibuat</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for admin in admins %}
+                <tr>
+                    <td>{{ admin.id }}</td>
+                    <td><strong>{{ admin.username }}</strong></td>
+                    <td>{{ admin.created_at }}</td>
+                    <td class="actions-cell">
+                        <!-- Reset Password -->
+                        <form method="POST" action="{{ url_for('reset_admin_password', admin_id=admin.id) }}" class="inline-form reset-form">
+                            <input type="password" name="new_password" placeholder="Password baru" minlength="6" required class="input-small">
+                            <button type="submit" class="btn btn-small btn-secondary">Reset</button>
+                        </form>
+                        
+                        {% if admin.username != current_user.username %}
+                        <!-- Delete Admin -->
+                        <form method="POST" action="{{ url_for('delete_admin', admin_id=admin.id) }}" class="inline-form">
+                            <button type="submit" class="btn btn-small btn-danger" onclick="return confirm('Hapus admin {{ admin.username }}?')">🗑️ Hapus</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="info-banner info-banner-warning">
+    <span class="info-icon">⚠️</span>
+    <span>Anda tidak dapat menghapus akun sendiri. Pastikan ada minimal satu admin aktif.</span>
+</div>
+{% endblock %}

@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Jadwal Manual{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>📋 Input Jadwal Manual</h2>
+    <p class="subtitle">Tambahkan jadwal standby untuk member yang lupa input</p>
+</div>
+
+<!-- Month Navigation -->
+<div class="month-nav">
+    {% set prev_month = month - 1 if month > 1 else 12 %}
+    {% set prev_year = year if month > 1 else year - 1 %}
+    {% set next_month = month + 1 if month < 12 else 1 %}
+    {% set next_year = year if month < 12 else year + 1 %}
+    
+    <a href="{{ url_for('schedules', year=prev_year, month=prev_month) }}" class="btn btn-ghost">◀ Sebelumnya</a>
+    <h3 class="month-title">{{ month_name }} {{ year }}</h3>
+    <a href="{{ url_for('schedules', year=next_year, month=next_month) }}" class="btn btn-ghost">Berikutnya ▶</a>
+</div>
+
+<!-- Add Schedule Form -->
+<div class="card card-compact">
+    <div class="card-header">
+        <h3>➕ Tambah Jadwal</h3>
+        <span class="form-hint">💡 Klik tanggal di kalender untuk memilih</span>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('add_schedule') }}" class="form-inline" id="addScheduleForm">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="user_id">Pilih Member</label>
+                    <select id="user_id" name="user_id" required>
+                        <option value="">-- Pilih Member --</option>
+                        {% for m in all_members %}
+                        <option value="{{ m.user_id }}">{{ m.username or m.telegram_username or m.user_id }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="tanggal">Tanggal</label>
+                    <input type="date" id="tanggal" name="tanggal" required>
+                </div>
+                
+                <div class="form-group form-actions-inline">
+                    <button type="submit" class="btn btn-primary">➕ Tambah Jadwal</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Calendar View -->
+<div class="card">
+    <div class="card-header">
+        <h3>📅 Kalender {{ month_name }} {{ year }}</h3>
+        <span class="form-hint">Klik untuk pilih tanggal</span>
+    </div>
+    <div class="card-body">
+        <table class="calendar-table">
+            <thead>
+                <tr>
+                    <th>Sen</th>
+                    <th>Sel</th>
+                    <th>Rab</th>
+                    <th>Kam</th>
+                    <th>Jum</th>
+                    <th class="weekend">Sab</th>
+                    <th class="weekend">Min</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for week in month_calendar %}
+                <tr>
+                    {% for day in week %}
+                    <td class="calendar-cell {% if day == 0 %}empty{% endif %} {% if loop.index > 5 %}weekend{% endif %} {% if day != 0 %}clickable{% endif %}"
+                        {% if day != 0 %}data-date="{{ '%04d-%02d-%02d'|format(year, month, day) }}" onclick="selectDate(this)"{% endif %}>
+                        {% if day != 0 %}
+                            {% set date_str = '%04d-%02d-%02d'|format(year, month, day) %}
+                            <div class="cell-header">
+                                <span class="day-number">{{ day }}</span>
+                            </div>
+                            <div class="cell-content">
+                                {% if date_str in jadwal_per_tanggal %}
+                                    {% for j in jadwal_per_tanggal[date_str] %}
+                                        <div class="schedule-chip">
+                                            <span>{{ j.username or j.telegram_username }}</span>
+                                            <form method="POST" action="{{ url_for('delete_schedule', jadwal_id=j.id) }}" class="inline-form">
+                                                <button type="submit" class="chip-delete" onclick="event.stopPropagation(); return confirm('Hapus jadwal ini?')">×</button>
+                                            </form>
+                                        </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="legend">
+    <span class="legend-item"><span class="schedule-chip">Nama</span> = Jadwal terisi, klik × untuk hapus</span>
+</div>
+
+<script>
+function selectDate(cell) {
+    // Remove previous selection
+    document.querySelectorAll('.calendar-cell.selected').forEach(c => c.classList.remove('selected'));
+    
+    // Add selection to clicked cell
+    cell.classList.add('selected');
+    
+    // Set the date input value
+    const dateValue = cell.getAttribute('data-date');
+    document.getElementById('tanggal').value = dateValue;
+    
+    // Scroll to form if needed
+    document.getElementById('addScheduleForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+</script>
+{% endblock %}
