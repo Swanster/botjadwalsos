@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="flex flex-col space-y-4 md:space-y-6">
+    <div class="flex flex-col gap-1">
+        <h2 class="text-3xl font-bold tracking-tight">Dashboard</h2>
+        <p class="text-muted-foreground">Ikhtisar jadwal standby hari ini</p>
+    </div>
+
+    <!-- Today's Overview -->
+    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <!-- Jadwal Hari Ini -->
+        <div class="card md:col-span-2 lg:col-span-1">
+            <div class="card-header flex flex-row items-center justify-between space-y-0 pb-2">
+                <h3 class="text-sm font-medium">Jadwal Hari Ini</h3>
+                <span class="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-1 rounded-full uppercase tracking-wider">{{ today_str }}</span>
+            </div>
+            <div class="card-content">
+                {% if jadwal_hari_ini %}
+                    <div class="space-y-4">
+                        {% for j in jadwal_hari_ini %}
+                            <div class="flex items-center gap-4 p-3 rounded-lg border bg-accent/30">
+                                <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+                                    {{ j.username[0]|upper }}
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-semibold truncate">{{ j.username }}</p>
+                                    {% if j.telegram_username %}
+                                        <p class="text-xs text-muted-foreground truncate">@{{ j.telegram_username }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="flex flex-col items-center justify-center py-8 text-center space-y-2">
+                        <span class="text-3xl">📭</span>
+                        <p class="text-sm text-muted-foreground italic">Tidak ada yang bertugas hari ini</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Stats Card -->
+        <div class="card">
+            <div class="card-header pb-2">
+                <h3 class="text-sm font-medium">Statistik Member</h3>
+            </div>
+            <div class="card-content">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="flex flex-col items-center justify-center p-4 rounded-md border bg-muted/50">
+                        <span class="text-2xl font-bold text-primary">{{ members_infra|length }}</span>
+                        <span class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">INFRA</span>
+                    </div>
+                    <div class="flex flex-col items-center justify-center p-4 rounded-md border bg-muted/50">
+                        <span class="text-2xl font-bold text-primary">{{ members_ce|length }}</span>
+                        <span class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">CE</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Limits Card -->
+        <div class="card">
+            <div class="card-header pb-2">
+                <h3 class="text-sm font-medium">Batasan Harian</h3>
+            </div>
+            <div class="card-content space-y-4">
+                <p class="text-sm text-muted-foreground">Sistem menggunakan batasan assignment harian yang fleksibel.</p>
+                <a href="{{ url_for('daily_limits') }}" class="btn btn-secondary w-full text-xs font-bold uppercase tracking-wide">
+                    Kelola Batasan
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="space-y-4">
+        <h3 class="text-lg font-semibold border-l-4 border-primary pl-3">Aksi Cepat</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <a href="{{ url_for('schedules') }}" class="btn btn-ghost border justify-start h-14 px-5">
+                <span class="mr-3 text-xl">📅</span>
+                <span class="font-medium">Input Jadwal Manual</span>
+            </a>
+            <a href="{{ url_for('members') }}" class="btn btn-ghost border justify-start h-14 px-5">
+                <span class="mr-3 text-xl">👥</span>
+                <span class="font-medium">Kelola Member</span>
+            </a>
+            <a href="{{ url_for('daily_limits') }}" class="btn btn-ghost border justify-start h-14 px-5">
+                <span class="mr-3 text-xl">⚖️</span>
+                <span class="font-medium">Detail Batasan</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Month Status -->
+    {% if bulan_dibuka %}
+    <div class="p-4 rounded-lg border-2 border-dashed border-primary/20 bg-primary/5">
+        <div class="flex items-center gap-3">
+            <span class="flex h-3 w-3 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]"></span>
+            <p class="text-sm font-medium">
+                Jadwal untuk bulan <span class="font-bold underline underline-offset-4">{{ bulan_dibuka.bulan }}/{{ bulan_dibuka.tahun }}</span> sedang <span class="text-green-500 font-bold">DIBUKA</span>
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Schedule Summary -->
+    <div class="card">
+        <div class="card-header pb-2">
+            <h3 class="text-sm font-medium">Ringkasan Jadwal Bulan Ini</h3>
+        </div>
+        <div class="card-content">
+            <div class="flex items-baseline gap-2">
+                <span class="text-3xl font-bold tracking-tighter">{{ jadwal_bulan_ini|length }}</span>
+                <span class="text-sm text-muted-foreground font-medium uppercase tracking-wider">Slot Terisi</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

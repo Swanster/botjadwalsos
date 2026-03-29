@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Kelola Member{% endblock %}
+
+{% block content %}
+<div class="flex flex-col space-y-6">
+    <div class="flex flex-col gap-1">
+        <h2 class="text-3xl font-bold tracking-tight">Kelola Member</h2>
+        <p class="text-muted-foreground">Tambah, edit, atau hapus member dari tim</p>
+    </div>
+
+    <!-- Add Member Form -->
+    <div class="card">
+        <div class="card-header pb-3">
+            <h3 class="card-title text-lg">Tambah Member Baru</h3>
+        </div>
+        <div class="card-content">
+            <form method="POST" action="{{ url_for('add_member') }}">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                    <div class="space-y-2 lg:col-span-1">
+                        <label for="user_id" class="text-sm font-medium">User ID</label>
+                        <input type="number" id="user_id" name="user_id" required class="input" placeholder="Contoh: 12345678">
+                    </div>
+                    <div class="space-y-2 lg:col-span-1">
+                        <label for="username" class="text-sm font-medium">Nama</label>
+                        <input type="text" id="username" name="username" required class="input" placeholder="Nama Lengkap">
+                    </div>
+                    <div class="space-y-2 lg:col-span-1">
+                        <label for="telegram_username" class="text-sm font-medium">Telegram</label>
+                        <input type="text" id="telegram_username" name="telegram_username" class="input" placeholder="username (tanpa @)">
+                    </div>
+                    <div class="space-y-2 lg:col-span-1">
+                        <label for="group_name" class="text-sm font-medium">Grup</label>
+                        <select id="group_name" name="group_name" required class="input">
+                            <option value="INFRA">INFRA</option>
+                            <option value="CE">CE</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary lg:col-span-1 w-full">
+                        Tambah Member
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- INFRA Members -->
+        <div class="card flex flex-col">
+            <div class="card-header border-b bg-muted/30">
+                <div class="flex items-center justify-between">
+                    <h3 class="card-title text-base font-bold uppercase tracking-wider">Tim INFRA</h3>
+                    <span class="text-xs font-medium bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">{{ members_infra|length }} Member</span>
+                </div>
+            </div>
+            <div class="card-content p-0 flex-1 overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b bg-muted/50 transition-colors">
+                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Nama</th>
+                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Telegram</th>
+                            <th class="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        {% for member in members_infra %}
+                        <tr class="hover:bg-muted/50 transition-colors">
+                            <td class="p-4 align-middle">
+                                <div class="font-medium">{{ member.username }}</div>
+                                <div class="text-[10px] text-muted-foreground">ID: {{ member.user_id }}</div>
+                            </td>
+                            <td class="p-4 align-middle">
+                                {% if member.telegram_username %}
+                                    <span class="text-primary hover:underline">@{{ member.telegram_username }}</span>
+                                {% else %}
+                                    <span class="text-muted-foreground italic">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="p-4 align-middle text-right">
+                                <div class="flex items-center justify-end gap-2">
+                                    <button type="button" class="btn btn-ghost h-8 w-8 p-0 edit-member-btn" 
+                                            data-user-id="{{ member.user_id }}"
+                                            data-username="{{ member.username|e }}"
+                                            data-telegram="{{ member.telegram_username|e }}"
+                                            data-group="{{ member.group_name or 'INFRA' }}">
+                                        <span>✏️</span>
+                                    </button>
+                                    <form method="POST" action="{{ url_for('delete_member', user_id=member.user_id) }}" 
+                                          onsubmit="return confirm('Hapus member {{ member.username }}?')">
+                                        <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50">
+                                            <span>🗑️</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- CE Members -->
+        <div class="card flex flex-col">
+            <div class="card-header border-b bg-muted/30">
+                <div class="flex items-center justify-between">
+                    <h3 class="card-title text-base font-bold uppercase tracking-wider">Tim CE</h3>
+                    <span class="text-xs font-medium bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">{{ members_ce|length }} Member</span>
+                </div>
+            </div>
+            <div class="card-content p-0 flex-1 overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b bg-muted/50 transition-colors">
+                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Nama</th>
+                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Telegram</th>
+                            <th class="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        {% for member in members_ce %}
+                        <tr class="hover:bg-muted/50 transition-colors">
+                            <td class="p-4 align-middle">
+                                <div class="font-medium">{{ member.username }}</div>
+                                <div class="text-[10px] text-muted-foreground">ID: {{ member.user_id }}</div>
+                            </td>
+                            <td class="p-4 align-middle">
+                                {% if member.telegram_username %}
+                                    <span class="text-primary hover:underline">@{{ member.telegram_username }}</span>
+                                {% else %}
+                                    <span class="text-muted-foreground italic">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="p-4 align-middle text-right">
+                                <div class="flex items-center justify-end gap-2">
+                                    <button type="button" class="btn btn-ghost h-8 w-8 p-0 edit-member-btn" 
+                                            data-user-id="{{ member.user_id }}"
+                                            data-username="{{ member.username|e }}"
+                                            data-telegram="{{ member.telegram_username|e }}"
+                                            data-group="{{ member.group_name or 'CE' }}">
+                                        <span>✏️</span>
+                                    </button>
+                                    <form method="POST" action="{{ url_for('delete_member', user_id=member.user_id) }}" 
+                                          onsubmit="return confirm('Hapus member {{ member.username }}?')">
+                                        <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50">
+                                            <span>🗑️</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Member Modal -->
+<div id="editMemberModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+        <div class="card w-full max-w-md bg-background animate-in zoom-in-95 duration-200">
+            <div class="card-header border-b flex flex-row items-center justify-between py-4">
+                <h3 class="card-title text-xl">Edit Member</h3>
+                <button onclick="closeEditModal()" class="text-2xl leading-none text-muted-foreground hover:text-foreground">&times;</button>
+            </div>
+            <div class="card-content p-6">
+                <form id="editMemberForm" method="POST">
+                    <div class="space-y-4">
+                        <input type="hidden" id="edit_user_id" name="user_id">
+                        <div class="space-y-2">
+                            <label for="edit_username" class="text-sm font-medium">Nama</label>
+                            <input type="text" id="edit_username" name="username" required class="input">
+                        </div>
+                        <div class="space-y-2">
+                            <label for="edit_telegram_username" class="text-sm font-medium">Telegram</label>
+                            <input type="text" id="edit_telegram_username" name="telegram_username" class="input">
+                        </div>
+                        <div class="space-y-2">
+                            <label for="edit_group_name" class="text-sm font-medium">Grup</label>
+                            <select id="edit_group_name" name="group_name" required class="input">
+                                <option value="INFRA">INFRA</option>
+                                <option value="CE">CE</option>
+                            </select>
+                        </div>
+                        <div class="flex gap-2 pt-4">
+                            <button type="submit" class="btn btn-primary flex-1">Simpan Perbarui</button>
+                            <button type="button" class="btn btn-secondary flex-1" onclick="closeEditModal()">Batal</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showEditForm(userId, username, telegramUsername, groupName) {
+    document.getElementById('edit_user_id').value = userId;
+    document.getElementById('edit_username').value = username;
+    document.getElementById('edit_telegram_username').value = telegramUsername;
+    document.getElementById('edit_group_name').value = groupName;
+    
+    // Set form action
+    document.getElementById('editMemberForm').action = '/members/' + userId + '/update';
+    
+    // Show modal
+    document.getElementById('editMemberModal').classList.remove('hidden');
+}
+
+function closeEditModal() {
+    document.getElementById('editMemberModal').classList.add('hidden');
+}
+
+// Event listener for edit buttons
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.edit-member-btn');
+    if (btn) {
+        showEditForm(
+            btn.dataset.userId,
+            btn.dataset.username,
+            btn.dataset.telegram,
+            btn.dataset.group
+        );
+    }
+});
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('editMemberModal');
+    if (event.target == modal.children[0]) {
+        closeEditModal();
+    }
+}
+</script>
+{% endblock %}

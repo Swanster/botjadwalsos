@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dashboard{% endblock %} - Bot Jadwal SOS</title>
+    
+    <!-- Tailwind CSS JIT CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        border: "hsl(var(--border))",
+                        input: "hsl(var(--input))",
+                        ring: "hsl(var(--ring))",
+                        background: "hsl(var(--background))",
+                        foreground: "hsl(var(--foreground))",
+                        primary: {
+                            DEFAULT: "hsl(var(--primary))",
+                            foreground: "hsl(var(--primary-foreground))",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(var(--secondary))",
+                            foreground: "hsl(var(--secondary-foreground))",
+                        },
+                        destructive: {
+                            DEFAULT: "hsl(var(--destructive))",
+                            foreground: "hsl(var(--destructive-foreground))",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(var(--muted))",
+                            foreground: "hsl(var(--muted-foreground))",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(var(--accent))",
+                            foreground: "hsl(var(--accent-foreground))",
+                        },
+                        card: {
+                            DEFAULT: "hsl(var(--card))",
+                            foreground: "hsl(var(--card-foreground))",
+                        },
+                    },
+                    borderRadius: {
+                        lg: "var(--radius)",
+                        md: "calc(var(--radius) - 2px)",
+                        sm: "calc(var(--radius) - 4px)",
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <style type="text/tailwindcss">
+        @layer base {
+            :root {
+                --background: 0 0% 100%;
+                --foreground: 220.9 39.3% 11%;
+                --card: 0 0% 100%;
+                --card-foreground: 220.9 39.3% 11%;
+                --popover: 0 0% 100%;
+                --popover-foreground: 220.9 39.3% 11%;
+                --primary: 21.7 65.6% 55.5%;
+                --primary-foreground: 0 0% 100%;
+                --secondary: 180 17.6% 39%;
+                --secondary-foreground: 0 0% 100%;
+                --muted: 220 14.3% 95.9%;
+                --muted-foreground: 220 8.9% 46.1%;
+                --accent: 0 0% 93.3%;
+                --accent-foreground: 220.9 39.3% 11%;
+                --destructive: 0 84.2% 60.2%;
+                --destructive-foreground: 0 0% 98%;
+                --border: 220 13% 91%;
+                --input: 220 13% 91%;
+                --ring: 21.7 65.6% 55.5%;
+                --radius: 0.75rem;
+            }
+
+            .dark {
+                --background: 270 5.6% 7.1%;
+                --foreground: 0 0% 98%;
+                --card: 270 5.6% 7.1%;
+                --card-foreground: 0 0% 98%;
+                --popover: 270 5.6% 7.1%;
+                --popover-foreground: 0 0% 98%;
+                --primary: 22.3 75.5% 61.6%;
+                --primary-foreground: 270 5.6% 7.1%;
+                --secondary: 180 17.4% 45.1%;
+                --secondary-foreground: 0 0% 98%;
+                --muted: 0 0% 15%;
+                --muted-foreground: 0 0% 70%;
+                --accent: 0 0% 20%;
+                --accent-foreground: 0 0% 98%;
+                --destructive: 0 84.2% 60.2%;
+                --destructive-foreground: 0 0% 98%;
+                --border: 0 0% 18%;
+                --input: 0 0% 18%;
+                --ring: 22.3 75.5% 61.6%;
+            }
+
+            body { @apply font-['Inter'] bg-background text-foreground antialiased; }
+            h1, h2, h3, h4, h5, h6 { @apply font-['Outfit'] tracking-tight; }
+        }
+        @layer components {
+            .btn { @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 active:scale-95; }
+            .btn-primary { @apply bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20; }
+            .btn-secondary { @apply bg-secondary text-secondary-foreground hover:bg-secondary/80; }
+            .btn-ghost { @apply hover:bg-accent hover:text-accent-foreground; }
+            .btn-danger { @apply bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-md shadow-destructive/20; }
+            
+            .card { @apply rounded-lg border bg-card text-card-foreground shadow-sm; }
+            .card-header { @apply flex flex-col space-y-1.5 p-6; }
+            .card-title { @apply text-2xl font-bold leading-none tracking-tight; }
+            .card-description { @apply text-sm text-muted-foreground; }
+            .card-content { @apply p-6 pt-0; }
+            .card-footer { @apply flex items-center p-6 pt-0; }
+            
+            .input { @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200; }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div class="flex flex-col md:flex-row min-h-screen">
+        <!-- Mobile Header -->
+        <header class="md:hidden flex items-center justify-between p-4 border-b bg-background sticky top-0 z-50">
+            <div class="flex items-center gap-2">
+                <span class="text-xl font-bold">JSOS</span>
+            </div>
+            <button id="mobile-menu-btn" class="p-2 rounded-md hover:bg-accent">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+            </button>
+        </header>
+
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-64 translate-x-[-100%] transition-transform bg-background border-r md:relative md:translate-x-0 md:flex flex-col">
+            <div class="p-6 border-b flex items-center gap-3">
+                <div class="w-8 h-8 rounded bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg">V</div>
+                <h1 class="font-bold text-lg">Jadwal SOS</h1>
+            </div>
+            
+            <nav class="flex-1 overflow-y-auto p-4 space-y-2">
+                <a href="{{ url_for('dashboard') }}" class="flex items-center gap-3 px-3 py-2 rounded-md transition-all {% if request.endpoint == 'dashboard' %}bg-primary text-primary-foreground shadow-lg shadow-primary/20{% else %}text-muted-foreground hover:bg-accent hover:text-foreground hover:translate-x-1{% endif %}">
+                    <span>📊</span>
+                    <span class="font-medium">Dashboard</span>
+                </a>
+                <a href="{{ url_for('schedules') }}" class="flex items-center gap-3 px-3 py-2 rounded-md transition-all {% if request.endpoint == 'schedules' %}bg-primary text-primary-foreground shadow-lg shadow-primary/20{% else %}text-muted-foreground hover:bg-accent hover:text-foreground hover:translate-x-1{% endif %}">
+                    <span>📅</span>
+                    <span class="font-medium">Jadwal Manual</span>
+                </a>
+                <a href="{{ url_for('members') }}" class="flex items-center gap-3 px-3 py-2 rounded-md transition-all {% if request.endpoint == 'members' %}bg-primary text-primary-foreground shadow-lg shadow-primary/20{% else %}text-muted-foreground hover:bg-accent hover:text-foreground hover:translate-x-1{% endif %}">
+                    <span>👥</span>
+                    <span class="font-medium">Member</span>
+                </a>
+                <a href="{{ url_for('daily_limits') }}" class="flex items-center gap-3 px-3 py-2 rounded-md transition-all {% if request.endpoint == 'daily_limits' %}bg-primary text-primary-foreground shadow-lg shadow-primary/20{% else %}text-muted-foreground hover:bg-accent hover:text-foreground hover:translate-x-1{% endif %}">
+                    <span>⚖️</span>
+                    <span class="font-medium">Batasan Harian</span>
+                </a>
+                <a href="{{ url_for('admins') }}" class="flex items-center gap-3 px-3 py-2 rounded-md transition-all {% if request.endpoint == 'admins' %}bg-primary text-primary-foreground shadow-lg shadow-primary/20{% else %}text-muted-foreground hover:bg-accent hover:text-foreground hover:translate-x-1{% endif %}">
+                    <span>🔐</span>
+                    <span class="font-medium">Admin User</span>
+                </a>
+                <a href="{{ url_for('change_password') }}" class="flex items-center gap-3 px-3 py-2 rounded-md transition-all {% if request.endpoint == 'change_password' %}bg-primary text-primary-foreground shadow-lg shadow-primary/20{% else %}text-muted-foreground hover:bg-accent hover:text-foreground hover:translate-x-1{% endif %}">
+                    <span>🔑</span>
+                    <span class="font-medium">Ganti Password</span>
+                </a>
+            </nav>
+            
+            <div class="p-4 border-t space-y-3">
+                <div class="flex items-center gap-3 px-3 py-2">
+                    <span class="text-lg">👤</span>
+                    <span class="text-sm font-medium">{{ current_user.username }}</span>
+                </div>
+                <a href="{{ url_for('logout') }}" class="flex items-center justify-center w-full px-4 py-2 text-sm font-medium border rounded-md hover:bg-destructive hover:text-white transition-colors">
+                    Logout
+                </a>
+            </div>
+        </aside>
+
+        <!-- Overlay for Mobile Sidebar -->
+        <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"></div>
+        
+        <!-- Main Content -->
+        <main class="flex-1 p-4 md:p-8 md:max-w-7xl mx-auto w-full overflow-x-hidden">
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="mb-8 space-y-2">
+                        {% for category, message in messages %}
+                            <div class="flex items-center justify-between p-4 rounded-md border {% if category == 'success' %}bg-green-50 text-green-700 border-green-200{% elif category == 'error' %}bg-red-50 text-red-700 border-red-200{% else %}bg-blue-50 text-blue-700 border-blue-200{% endif %}" role="alert">
+                                <span>{{ message }}</span>
+                                <button onclick="this.parentElement.remove()" class="text-lg leading-none">&times;</button>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+            
+            <div class="animate-in fade-in duration-500">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // Mobile Sidebar Toggle
+        const btn = document.getElementById('mobile-menu-btn');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+
+        function toggleMenu() {
+            sidebar.classList.toggle('translate-x-[-100%]');
+            overlay.classList.toggle('hidden');
+        }
+
+        if (btn) btn.addEventListener('click', toggleMenu);
+        if (overlay) overlay.addEventListener('click', toggleMenu);
+    </script>
+</body>
+</html>

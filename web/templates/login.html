@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Bot Jadwal SOS</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        border: "hsl(var(--border))",
+                        input: "hsl(var(--input))",
+                        ring: "hsl(var(--ring))",
+                        background: "hsl(var(--background))",
+                        foreground: "hsl(var(--foreground))",
+                        primary: {
+                            DEFAULT: "hsl(var(--primary))",
+                            foreground: "hsl(var(--primary-foreground))",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(var(--secondary))",
+                            foreground: "hsl(var(--secondary-foreground))",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(var(--muted))",
+                            foreground: "hsl(var(--muted-foreground))",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(var(--accent))",
+                            foreground: "hsl(var(--accent-foreground))",
+                        },
+                        destructive: {
+                            DEFAULT: "hsl(var(--destructive))",
+                            foreground: "hsl(var(--destructive-foreground))",
+                        },
+                        card: {
+                            DEFAULT: "hsl(var(--card))",
+                            foreground: "hsl(var(--card-foreground))",
+                        },
+                    },
+                    borderRadius: {
+                        lg: "var(--radius)",
+                        md: "calc(var(--radius) - 2px)",
+                        sm: "calc(var(--radius) - 4px)",
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        heading: ['Outfit', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer base {
+            :root {
+                --background: 0 0% 100%;
+                --foreground: 220.9 39.3% 11%;
+                --card: 0 0% 100%;
+                --card-foreground: 220.9 39.3% 11%;
+                --popover: 0 0% 100%;
+                --popover-foreground: 220.9 39.3% 11%;
+                --primary: 21.7 65.6% 55.5%;
+                --primary-foreground: 0 0% 100%;
+                --secondary: 180 17.6% 39%;
+                --secondary-foreground: 0 0% 100%;
+                --muted: 220 14.3% 95.9%;
+                --muted-foreground: 220 8.9% 46.1%;
+                --accent: 0 0% 93.3%;
+                --accent-foreground: 220.9 39.3% 11%;
+                --destructive: 0 84.2% 60.2%;
+                --destructive-foreground: 0 0% 98%;
+                --border: 220 13% 91%;
+                --input: 220 13% 91%;
+                --ring: 21.7 65.6% 55.5%;
+                --radius: 0.75rem;
+            }
+
+            .dark {
+                --background: 270 5.6% 7.1%;
+                --foreground: 0 0% 98%;
+                --card: 270 5.6% 7.1%;
+                --card-foreground: 0 0% 98%;
+                --popover: 270 5.6% 7.1%;
+                --popover-foreground: 0 0% 98%;
+                --primary: 22.3 75.5% 61.6%;
+                --primary-foreground: 270 5.6% 7.1%;
+                --secondary: 180 17.4% 45.1%;
+                --secondary-foreground: 0 0% 98%;
+                --muted: 0 0% 15%;
+                --muted-foreground: 0 0% 75%;
+                --accent: 0 0% 20%;
+                --accent-foreground: 0 0% 98%;
+                --destructive: 0 84.2% 60.2%;
+                --destructive-foreground: 0 0% 98%;
+                --border: 0 0% 18%;
+                --input: 0 0% 18%;
+                --ring: 22.3 75.5% 61.6%;
+            }
+            body { @apply font-sans bg-background text-foreground antialiased; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div class="flex flex-col items-center text-center space-y-2">
+            <div class="h-12 w-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold heading-font shadow-lg">V</div>
+            <h1 class="text-3xl font-extrabold tracking-tight heading-font text-foreground">Bot Jadwal SOS</h1>
+            <p class="text-muted-foreground font-medium">Masuk untuk mengelola jadwal standby</p>
+        </div>
+
+        <div class="bg-card rounded-xl border shadow-xl overflow-hidden">
+            <div class="p-8">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="mb-6 p-4 rounded-lg flex items-center gap-3 animate-in slide-in-from-top-2 
+                                {% if category == 'error' %}bg-destructive/10 text-destructive border border-destructive/20{% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">
+                                <span class="text-lg">{% if category == 'error' %}⚠️{% else %}✅{% endif %}</span>
+                                <p class="text-sm font-medium">{{ message }}</p>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" class="space-y-6">
+                    <div class="space-y-2">
+                        <label for="username" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Username</label>
+                        <input type="text" id="username" name="username" required autofocus 
+                               class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200" 
+                               placeholder="Masukkan username">
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <label for="password" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Password</label>
+                        </div>
+                        <input type="password" id="password" name="password" required 
+                               class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200" 
+                               placeholder="••••••••">
+                    </div>
+                    
+                    <button type="submit" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8 w-full shadow-md active:scale-[0.98]">
+                        Masuk ke Dashboard
+                    </button>
+                </form>
+            </div>
+            
+            <div class="bg-muted/50 p-4 border-t text-center">
+                <p class="text-[10px] text-muted-foreground font-bold tracking-widest uppercase">&copy; 2026 VARNION INFRA TIM</p>
+            </div>
+        </div>
+
+        <div class="text-center">
+            <p class="text-xs text-muted-foreground">Butuh bantuan akses? Hubungi Admin Utama.</p>
+        </div>
+    </div>
+</body>
+</html>

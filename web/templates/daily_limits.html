@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Batasan Harian{% endblock %}
+
+{% block content %}
+<div class="flex flex-col space-y-6">
+    <div class="flex flex-col gap-1">
+        <h2 class="text-3xl font-bold tracking-tight">Batasan Assignment Harian</h2>
+        <p class="text-muted-foreground">Atur batasan jumlah orang standby untuk tanggal tertentu</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Single Date Limit Form -->
+        <div class="card">
+            <div class="card-header pb-3">
+                <h3 class="card-title text-lg">Tambah/Edit Batasan Harian</h3>
+            </div>
+            <div class="card-content">
+                <form method="POST">
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label for="tanggal" class="text-sm font-medium">Tanggal</label>
+                                <input type="date" id="tanggal" name="tanggal" required class="input">
+                            </div>
+                            <div class="space-y-2">
+                                <label for="max_assignments" class="text-sm font-medium">Maksimal Orang/Hari</label>
+                                <input type="number" id="max_assignments" name="max_assignments" min="1" max="10" value="1" required class="input">
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-muted-foreground italic">Batas maksimal orang yang boleh standby di tanggal ini</p>
+                        <button type="submit" class="btn btn-primary w-full">Simpan Batasan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Bulk Monthly Setting Form -->
+        <div class="card">
+            <div class="card-header pb-3">
+                <h3 class="card-title text-lg">Pengaturan Bulanan Massal</h3>
+            </div>
+            <div class="card-content">
+                <form method="POST">
+                    <input type="hidden" name="bulk_set" value="true">
+                    <div class="space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="space-y-2">
+                                <label for="bulan" class="text-sm font-medium">Bulan</label>
+                                <select id="bulan" name="bulan" required class="input">
+                                    <option value="">Pilih Bulan</option>
+                                    {% for i in range(1, 13) %}
+                                    <option value="{{ i }}">{{ i }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label for="tahun" class="text-sm font-medium">Tahun</label>
+                                <input type="number" id="tahun" name="tahun" min="2024" max="2030" value="{{ current_year or 2026 }}" required class="input">
+                            </div>
+                            <div class="space-y-2">
+                                <label for="max_assignments_bulan" class="text-sm font-medium">Maksimal</label>
+                                <input type="number" id="max_assignments_bulan" name="max_assignments_bulan" min="1" max="10" value="1" required class="input">
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-muted-foreground italic">Setel batasan yang sama untuk semua tanggal dalam satu bulan</p>
+                        <button type="submit" class="btn btn-secondary w-full" onclick="return confirm('Atur batasan ini untuk seluruh bulan? Ini akan menimpa pengaturan yang ada.')">
+                            Setel untuk Seluruh Bulan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Limits Table -->
+    <div class="card">
+        <div class="card-header border-b bg-muted/30">
+            <h3 class="card-title text-base font-bold uppercase tracking-wider">Batasan Harian Saat Ini</h3>
+        </div>
+        <div class="card-content p-0 overflow-x-auto">
+            {% if limits %}
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b bg-muted/50 transition-colors">
+                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground font-bold">Tanggal</th>
+                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground font-bold">Batas Maksimal</th>
+                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground font-bold hidden sm:table-cell">Dibuat Pada</th>
+                            <th class="h-10 px-4 text-right align-middle font-medium text-muted-foreground font-bold">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        {% for limit in limits %}
+                        <tr class="hover:bg-muted/50 transition-colors">
+                            <td class="p-4 align-middle font-bold">{{ limit.tanggal }}</td>
+                            <td class="p-4 align-middle">
+                                <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
+                                    {{ limit.max_assignments }} orang
+                                </span>
+                            </td>
+                            <td class="p-4 align-middle text-muted-foreground text-xs hidden sm:table-cell">{{ limit.created_at[:16] }}</td>
+                            <td class="p-4 align-middle text-right">
+                                <form method="POST" action="{{ url_for('delete_daily_limit_route', tanggal=limit.tanggal) }}" 
+                                      onsubmit="return confirm('Hapus batasan untuk {{ limit.tanggal }}?')">
+                                    <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:text-red-600">
+                                        <span>🗑️</span>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <div class="flex flex-col items-center justify-center py-12 text-center space-y-3">
+                    <span class="text-4xl">⚖️</span>
+                    <div class="space-y-1">
+                        <p class="font-bold">Belum ada batasan harian yang diatur</p>
+                        <p class="text-sm text-muted-foreground">Tambah batasan untuk tanggal tertentu menggunakan formulir di atas.</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Info Banner -->
+    <div class="p-4 rounded-lg border border-primary/20 bg-primary/5 text-foreground flex gap-3">
+        <span class="text-xl text-primary">ℹ️</span>
+        <div class="text-sm space-y-1">
+            <p class="font-bold text-primary">Informasi Penting</p>
+            <p class="text-muted-foreground">Jika tidak ada batasan yang diatur untuk suatu tanggal, sistem akan menggunakan default <strong class="text-foreground">1 orang per hari</strong>. Batasan harian memiliki prioritas lebih tinggi daripada kuota grup.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
