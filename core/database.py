@@ -5,6 +5,8 @@ import calendar
 import pytz
 import contextlib
 
+makassar_tz = pytz.timezone("Asia/Makassar")
+
 from config import DB_NAME
 
 @contextlib.contextmanager
@@ -60,7 +62,7 @@ def create_tables():
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             telegram_username TEXT,
-            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'CE'))
+            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'CE', 'APPS'))
         )''')
         
         # --- TABEL SETTINGS (untuk kuota dinamis) ---
@@ -88,6 +90,16 @@ def create_tables():
             max_assignments INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
+        )''')
+        
+        # --- TABEL AUDIT LOGS (untuk mencatat aktivitas admin) ---
+        cur.execute('''
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            action TEXT NOT NULL,
+            description TEXT,
+            timestamp TEXT NOT NULL
         )''')
         
         conn.commit()
@@ -419,6 +431,8 @@ def init_default_settings():
         ('kuota_ce', '1', 'Jumlah orang CE per hari'),
         ('max_hari_infra', '10', 'Maksimal hari standby per bulan untuk INFRA'),
         ('max_hari_ce', '31', 'Maksimal hari standby per bulan untuk CE'),
+        ('kuota_apps', '1', 'Jumlah orang APPS per hari'),
+        ('max_hari_apps', '31', 'Maksimal hari standby per bulan untuk APPS'),
     ]
     with connect_db() as conn:
         cur = conn.cursor()
@@ -582,3 +596,21 @@ def is_date_full(tanggal, default_limit=1):
     limit = get_daily_limit(tanggal, default_limit)
     current_count = get_assignment_count_for_date(tanggal)
     return current_count >= limit
+
+def add_audit_log(username, action, description):
+    """Menambahkan catatan aktivitas ke tabel audit_logs."""
+    timestamp = datetime.now(makassar_tz).strftime('%Y-%m-%d %H:%M:%S')
+    with connect_db() as conn:
+        cur = conn.cursor()
+        cur.execute('''
+        INSERT INTO audit_logs (username, action, description, timestamp)
+        VALUES (?, ?, ?, ?)
+        ''', (username, action, description, timestamp))
+        conn.commit()
+
+def get_audit_logs(limit=100):
+    """Mengambil daftar log aktivitas terbaru."""
+    with connect_db() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?', (limit,))
+        return cur.fetchall()

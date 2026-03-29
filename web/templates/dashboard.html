@@ -48,7 +48,7 @@
                 <h3 class="text-sm font-medium">Statistik Member</h3>
             </div>
             <div class="card-content">
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-3 gap-4">
                     <div class="flex flex-col items-center justify-center p-4 rounded-md border bg-muted/50">
                         <span class="text-2xl font-bold text-primary">{{ members_infra|length }}</span>
                         <span class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">INFRA</span>
@@ -56,6 +56,10 @@
                     <div class="flex flex-col items-center justify-center p-4 rounded-md border bg-muted/50">
                         <span class="text-2xl font-bold text-primary">{{ members_ce|length }}</span>
                         <span class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">CE</span>
+                    </div>
+                    <div class="flex flex-col items-center justify-center p-4 rounded-md border bg-muted/50">
+                        <span class="text-2xl font-bold text-primary">{{ members_apps|length }}</span>
+                        <span class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">APPS</span>
                     </div>
                 </div>
             </div>

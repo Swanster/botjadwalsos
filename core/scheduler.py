@@ -166,6 +166,7 @@ def kirim_peringatan_jadwal_mingguan(bot):
     # Ambil jadwal yang sudah ada per grup
     jadwal_infra = get_jadwal_by_group(next_week_start.year, next_week_start.month, 'INFRA')
     jadwal_ce = get_jadwal_by_group(next_week_start.year, next_week_start.month, 'CE')
+    jadwal_apps = get_jadwal_by_group(next_week_start.year, next_week_start.month, 'APPS')
 
     # Hitung slot terisi per hari untuk setiap grup
     slot_terisi_infra = defaultdict(int)
@@ -174,9 +175,13 @@ def kirim_peringatan_jadwal_mingguan(bot):
     slot_terisi_ce = defaultdict(int)
     for j in jadwal_ce: slot_terisi_ce[j['tanggal']] += 1
 
+    slot_terisi_apps = defaultdict(int)
+    for j in jadwal_apps: slot_terisi_apps[j['tanggal']] += 1
+
     # Cari tanggal yang kuotanya kurang
     tanggal_kurang_infra = []
     tanggal_kurang_ce = []
+    tanggal_kurang_apps = []
     for i in range(7):
         current_date = next_week_start + timedelta(days=i)
         current_date_str = current_date.strftime('%Y-%m-%d')
@@ -184,13 +189,16 @@ def kirim_peringatan_jadwal_mingguan(bot):
         # Cek jika tanggal berada di bulan yang sama dengan awal minggu
         if current_date.month == next_week_start.month:
             # Cek batasan harian (prioritas utama)
-            max_per_hari_infra = get_daily_limit(current_date_str, 2)  # Default 2 untuk backward compatibility
-            max_per_hari_ce = get_daily_limit(current_date_str, 1)     # Default 1 untuk backward compatibility
+            max_per_hari_infra = get_daily_limit(current_date_str, 2)
+            max_per_hari_ce = get_daily_limit(current_date_str, 1)
+            max_per_hari_apps = get_daily_limit(current_date_str, 1)
                 
             if slot_terisi_infra.get(current_date_str, 0) < max_per_hari_infra:
                 tanggal_kurang_infra.append(current_date_str)
             if slot_terisi_ce.get(current_date_str, 0) < max_per_hari_ce:
                 tanggal_kurang_ce.append(current_date_str)
+            if slot_terisi_apps.get(current_date_str, 0) < max_per_hari_apps:
+                tanggal_kurang_apps.append(current_date_str)
 
     # Kirim peringatan ke anggota grup INFRA jika perlu
     if tanggal_kurang_infra:
@@ -221,8 +229,24 @@ def kirim_peringatan_jadwal_mingguan(bot):
                 bot.send_message(user['user_id'], pesan_ce, parse_mode='Markdown')
             except Exception as e:
                 print(f"Gagal mengirim DM peringatan ke user CE {user['telegram_username']}: {e}")
+
+    # Kirim peringatan ke anggota grup APPS jika perlu
+    if tanggal_kurang_apps:
+        users_apps = get_all_users_in_group('APPS')
+        pesan_apps = "🔔 *Peringatan Jadwal APPS*\n\nJadwal standby Anda untuk beberapa tanggal di minggu depan masih belum terisi penuh (kuota: 1 orang/hari). Tanggal yang masih kosong:\n\n"
+        for tgl in tanggal_kurang_apps:
+            tgl_obj = datetime.strptime(tgl, '%Y-%m-%d').date()
+            pesan_apps += f"- {format_tanggal_indonesia(tgl_obj)}\n"
+        pesan_apps += "\nMohon segera lengkapi jadwal Anda dengan menggunakan perintah `/start` di grup."
+
+        for user in users_apps:
+            try:
+                bot.send_message(user['user_id'], pesan_apps, parse_mode='Markdown')
+            except Exception as e:
+                print(f"Gagal mengirim DM peringatan ke user APPS {user['telegram_username']}: {e}")
+                print(f"Gagal mengirim DM peringatan ke user APPS {user['telegram_username']}: {e}")
     
-    if not tanggal_kurang_infra and not tanggal_kurang_ce:
+    if not tanggal_kurang_infra and not tanggal_kurang_ce and not tanggal_kurang_apps:
         print("Scheduler: Jadwal minggu depan untuk semua grup sudah penuh.")
     
     print("Scheduler: Pengecekan peringatan jadwal mingguan selesai.")
@@ -302,20 +326,25 @@ def kirim_peringatan_h_minus_3(bot):
     # Dapatkan jadwal yang sudah terisi pada hari H-3
     jadwal_infra = get_jadwal_by_group(target_date.year, target_date.month, 'INFRA')
     jadwal_ce = get_jadwal_by_group(target_date.year, target_date.month, 'CE')
+    jadwal_apps = get_jadwal_by_group(target_date.year, target_date.month, 'APPS')
     
     # Hitung jumlah terisi khusus untuk tanggal target
     terisi_infra = sum(1 for j in jadwal_infra if j['tanggal'] == target_date_str)
     terisi_ce = sum(1 for j in jadwal_ce if j['tanggal'] == target_date_str)
+    terisi_apps = sum(1 for j in jadwal_apps if j['tanggal'] == target_date_str)
 
     # Cek batasan harian
-    max_per_hari_infra = get_daily_limit(target_date_str, 2)  # Default 2
-    max_per_hari_ce = get_daily_limit(target_date_str, 1)     # Default 1
+    max_per_hari_infra = get_daily_limit(target_date_str, 2)
+    max_per_hari_ce = get_daily_limit(target_date_str, 1)
+    max_per_hari_apps = get_daily_limit(target_date_str, 1)
 
     pesan_peringatan = ""
     if terisi_infra < max_per_hari_infra:
         pesan_peringatan += f"• 🚨 Slot *INFRA* masih kurang ({terisi_infra}/{max_per_hari_infra} terisi).\n"
     if terisi_ce < max_per_hari_ce:
         pesan_peringatan += f"• 🚨 Slot *CE* masih kurang ({terisi_ce}/{max_per_hari_ce} terisi).\n"
+    if terisi_apps < max_per_hari_apps:
+        pesan_peringatan += f"• 🚨 Slot *APPS* masih kurang ({terisi_apps}/{max_per_hari_apps} terisi).\n"
         
     if not pesan_peringatan:
         print(f"Scheduler: Slot untuk H-3 ({target_date_str}) sudah penuh. Peringatan dilewati.")

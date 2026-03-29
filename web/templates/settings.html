@@ -29,6 +29,12 @@
                         <input type="number" id="kuota_ce" name="kuota_ce" min="1" max="10" 
                                value="{{ settings.get('kuota_ce', {}).get('value', '1') }}" required>
                     </div>
+
+                    <div class="form-group">
+                        <label for="kuota_apps">APPS (per hari)</label>
+                        <input type="number" id="kuota_apps" name="kuota_apps" min="1" max="10" 
+                               value="{{ settings.get('kuota_apps', {}).get('value', '1') }}" required>
+                    </div>
                 </div>
             </div>
             
@@ -47,6 +53,12 @@
                         <label for="max_hari_ce">CE (max hari/bulan)</label>
                         <input type="number" id="max_hari_ce" name="max_hari_ce" min="1" max="31" 
                                value="{{ settings.get('max_hari_ce', {}).get('value', '31') }}" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="max_hari_apps">APPS (max hari/bulan)</label>
+                        <input type="number" id="max_hari_apps" name="max_hari_apps" min="1" max="31" 
+                               value="{{ settings.get('max_hari_apps', {}).get('value', '31') }}" required>
                     </div>
                 </div>
             </div>

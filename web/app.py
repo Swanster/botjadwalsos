@@ -20,7 +20,7 @@ from core.database import (
     get_bulan_dibuka, format_tanggal_indonesia,
     create_tables, init_default_admin,
     set_daily_limit, get_all_daily_limits, delete_daily_limit, get_daily_limit,
-    is_date_full
+    is_date_full, add_audit_log, get_audit_logs
 )
 
 # =============================================================================
@@ -70,6 +70,7 @@ def create_app():
             if admin:
                 user = User(admin['username'])
                 login_user(user)
+                add_audit_log(username, 'LOGIN', 'Berhasil login ke dashboard web')
                 flash('Login berhasil!', 'success')
                 return redirect(url_for('dashboard'))
             else:
@@ -110,6 +111,7 @@ def create_app():
         # Get all members
         members_infra = get_all_users_in_group('INFRA')
         members_ce = get_all_users_in_group('CE')
+        members_apps = get_all_users_in_group('APPS')
         
         # Get open month info
         bulan_dibuka = get_bulan_dibuka()
@@ -121,6 +123,7 @@ def create_app():
             jadwal_bulan_ini=jadwal_bulan_ini,
             members_infra=members_infra,
             members_ce=members_ce,
+            members_apps=members_apps,
             bulan_dibuka=bulan_dibuka
         )
 
@@ -133,9 +136,11 @@ def create_app():
     def members():
         members_infra = get_all_users_in_group('INFRA')
         members_ce = get_all_users_in_group('CE')
+        members_apps = get_all_users_in_group('APPS')
         return render_template('members.html', 
             members_infra=members_infra, 
-            members_ce=members_ce
+            members_ce=members_ce,
+            members_apps=members_apps
         )
     
     @app.route('/members/add', methods=['POST'])
@@ -204,7 +209,8 @@ def create_app():
         # Get all members for dropdown - convert sqlite3.Row to dict
         members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
         members_ce = [dict(m) for m in get_all_users_in_group('CE')]
-        all_members = members_infra + members_ce
+        members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
+        all_members = members_infra + members_ce + members_apps
         
         # Calendar info
         cal = calendar.Calendar(firstweekday=calendar.MONDAY)
@@ -259,7 +265,8 @@ def create_app():
             # Get username from members - convert sqlite3.Row to dict
             members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
             members_ce = [dict(m) for m in get_all_users_in_group('CE')]
-            members = members_infra + members_ce
+            members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
+            members = members_infra + members_ce + members_apps
             
             username = ''
             telegram_username = ''
@@ -276,6 +283,7 @@ def create_app():
                 return redirect(url_for('schedules'))
             
             if add_jadwal_manual(user_id, username, telegram_username, tanggal):
+                add_audit_log(current_user.username, 'ADD_SCHEDULE', f'Menambah jadwal manual untuk {username} ({user_id}) pada tanggal {tanggal}')
                 flash(f'Jadwal untuk {username} pada {tanggal} berhasil ditambahkan.', 'success')
             else:
                 flash('Gagal menambahkan jadwal.', 'error')
@@ -290,6 +298,7 @@ def create_app():
     @login_required
     def delete_schedule(jadwal_id):
         if delete_jadwal_by_id(jadwal_id):
+            add_audit_log(current_user.username, 'DELETE_SCHEDULE', f'Menghapus jadwal dengan ID {jadwal_id}')
             flash('Jadwal berhasil dihapus.', 'success')
         else:
             flash('Gagal menghapus jadwal.', 'error')
@@ -336,6 +345,12 @@ def create_app():
     def admins():
         admin_list = get_all_admin_users()
         return render_template('admins.html', admins=admin_list)
+    
+    @app.route('/logs')
+    @login_required
+    def logs():
+        recent_logs = get_audit_logs(limit=200)
+        return render_template('logs.html', logs=recent_logs)
     
     @app.route('/admins/add', methods=['POST'])
     @login_required

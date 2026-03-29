@@ -66,10 +66,13 @@ def create_calendar(mode, user_id, year, month):
             return "❌ Anda belum terdaftar di grup mana pun. Silakan hubungi admin."
         jadwal_infra = get_jadwal_by_group(year, month, 'INFRA')
         jadwal_ce = get_jadwal_by_group(year, month, 'CE')
+        jadwal_apps = get_jadwal_by_group(year, month, 'APPS')
         slot_terisi_infra = defaultdict(int)
         for j in jadwal_infra: slot_terisi_infra[j['tanggal']] += 1
         slot_terisi_ce = defaultdict(int)
         for j in jadwal_ce: slot_terisi_ce[j['tanggal']] += 1
+        slot_terisi_apps = defaultdict(int)
+        for j in jadwal_apps: slot_terisi_apps[j['tanggal']] += 1
         absensi_user = get_user_absensi_in_range(user_id, start_of_month, end_of_month)
     elif mode == 'cuti':
         pilihan_sementara = user_cuti_selections.get(user_id, {}).get('choices', set())
@@ -122,7 +125,12 @@ def create_calendar(mode, user_id, year, month):
                     
                     # Cek batasan harian (prioritas utama)
                     max_per_hari = get_daily_limit(current_date_str, 1)  # Default 1 jika tidak ada setting
-                    jumlah_terisi = slot_terisi_infra.get(current_date_str, 0) if user_group == 'INFRA' else slot_terisi_ce.get(current_date_str, 0)
+                    if user_group == 'INFRA':
+                        jumlah_terisi = slot_terisi_infra.get(current_date_str, 0)
+                    elif user_group == 'CE':
+                        jumlah_terisi = slot_terisi_ce.get(current_date_str, 0)
+                    else: # APPS
+                        jumlah_terisi = slot_terisi_apps.get(current_date_str, 0)
                     
                     is_penuh = jumlah_terisi >= max_per_hari
                     is_weekend_terkunci = False
@@ -183,7 +191,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         user_id = message.from_user.id
         user_group = get_user_group(user_id)
         if not user_group:
-            bot.reply_to(message, "❌ Akun Anda belum terdaftar di grup manapun (INFRA/CE). Silakan hubungi Admin untuk didaftarkan.", message_thread_id=message.message_thread_id)
+            bot.reply_to(message, "❌ Akun Anda belum terdaftar di grup manapun (INFRA/CE/APPS). Silakan hubungi Admin untuk didaftarkan.", message_thread_id=message.message_thread_id)
             return
 
         tahun, bulan = bulan_terbuka['tahun'], bulan_terbuka['bulan']
@@ -421,7 +429,12 @@ def register_user_handlers(bot: telebot.TeleBot):
 
                     # --- LOGIKA LAMA: Batasan dinamis per grup dari database ---
                     user_group = get_user_group(user_id)
-                    max_hari = int(get_setting('max_hari_infra', '10')) if user_group == 'INFRA' else int(get_setting('max_hari_ce', '31'))
+                    if user_group == 'INFRA':
+                        max_hari = int(get_setting('max_hari_infra', '10'))
+                    elif user_group == 'CE':
+                        max_hari = int(get_setting('max_hari_ce', '31'))
+                    else: # APPS
+                        max_hari = int(get_setting('max_hari_apps', '31'))
                     # Hitung pilihan saat ini di bulan yang sama dengan tanggal yang akan ditambahkan
                     dt_obj_toggle = datetime.strptime(date_str, '%Y-%m-%d')
                     pilihan_bulan_ini = {s for s in selections if datetime.strptime(s, '%Y-%m-%d').month == dt_obj_toggle.month}
