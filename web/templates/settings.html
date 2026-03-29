@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Settings Kuota{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>⚙️ Settings Kuota</h2>
+    <p class="subtitle">Atur kuota standby per grup</p>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3>Pengaturan Kuota</h3>
+    </div>
+    <div class="card-body">
+        <form method="POST" class="form-horizontal">
+            <div class="form-section">
+                <h4>Kuota Harian</h4>
+                <p class="form-help">Jumlah orang yang harus standby per hari</p>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="kuota_infra">INFRA (per hari)</label>
+                        <input type="number" id="kuota_infra" name="kuota_infra" min="1" max="10" 
+                               value="{{ settings.get('kuota_infra', {}).get('value', '2') }}" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="kuota_ce">CE (per hari)</label>
+                        <input type="number" id="kuota_ce" name="kuota_ce" min="1" max="10" 
+                               value="{{ settings.get('kuota_ce', {}).get('value', '1') }}" required>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-section">
+                <h4>Maksimal Hari per Bulan</h4>
+                <p class="form-help">Batas maksimal hari standby per member dalam sebulan</p>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="max_hari_infra">INFRA (max hari/bulan)</label>
+                        <input type="number" id="max_hari_infra" name="max_hari_infra" min="1" max="31" 
+                               value="{{ settings.get('max_hari_infra', {}).get('value', '10') }}" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="max_hari_ce">CE (max hari/bulan)</label>
+                        <input type="number" id="max_hari_ce" name="max_hari_ce" min="1" max="31" 
+                               value="{{ settings.get('max_hari_ce', {}).get('value', '31') }}" required>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">💾 Simpan Perubahan</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="info-banner info-banner-note">
+    <span class="info-icon">💡</span>
+    <span>Perubahan kuota akan langsung berlaku untuk bot Telegram tanpa perlu restart.</span>
+</div>
+{% endblock %}
