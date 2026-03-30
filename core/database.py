@@ -62,7 +62,7 @@ def create_tables():
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             telegram_username TEXT,
-            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'CE', 'APPS'))
+            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'CE', 'APPS', 'MONITORING'))
         )''')
         
         # --- TABEL SETTINGS (untuk kuota dinamis) ---
@@ -152,7 +152,7 @@ def get_all_users_in_group(group_name):
     """Mengambil semua data pengguna dalam grup tertentu."""
     with connect_db() as conn:
         cur = conn.cursor()
-        cur.execute("SELECT user_id, username, telegram_username FROM user_groups WHERE group_name = ?", (group_name.upper(),))
+        cur.execute("SELECT user_id, username, telegram_username, group_name FROM user_groups WHERE group_name = ?", (group_name.upper(),))
         return cur.fetchall()
 
 def populate_default_config():
@@ -214,7 +214,8 @@ def get_jadwal_for_month(tahun, bulan):
         query = """
             SELECT j.id, j.user_id, j.tanggal,
                    COALESCE(ug.username, j.username) as username,
-                   COALESCE(ug.telegram_username, j.telegram_username) as telegram_username
+                   COALESCE(ug.telegram_username, j.telegram_username) as telegram_username,
+                   ug.group_name
             FROM jadwal j
             LEFT JOIN user_groups ug ON j.user_id = ug.user_id
             WHERE j.tanggal BETWEEN ? AND ?
@@ -258,7 +259,8 @@ def get_jadwal_for_specific_date(tanggal_str):
         query = """
             SELECT j.id, j.user_id, j.tanggal,
                    COALESCE(ug.username, j.username) as username,
-                   COALESCE(ug.telegram_username, j.telegram_username) as telegram_username
+                   COALESCE(ug.telegram_username, j.telegram_username) as telegram_username,
+                   ug.group_name
             FROM jadwal j
             LEFT JOIN user_groups ug ON j.user_id = ug.user_id
             WHERE j.tanggal = ?
@@ -354,12 +356,6 @@ def tutup_bulan_aktif(tahun, bulan):
 
 # NOTE: get_user_group dan get_jadwal_by_group sudah didefinisikan di atas (line ~104 dan ~112)
 
-def get_all_users_in_group(group_name):
-    """Mengambil semua ID pengguna dalam grup tertentu."""
-    with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT user_id, username, telegram_username FROM user_groups WHERE group_name = ?", (group_name,))
-        return cur.fetchall()
 
 def get_all_registered_users():
     """Mengambil semua pengguna yang terdaftar di tabel user_groups."""
@@ -433,6 +429,8 @@ def init_default_settings():
         ('max_hari_ce', '31', 'Maksimal hari standby per bulan untuk CE'),
         ('kuota_apps', '1', 'Jumlah orang APPS per hari'),
         ('max_hari_apps', '31', 'Maksimal hari standby per bulan untuk APPS'),
+        ('kuota_monitoring', '1', 'Jumlah orang Monitoring per hari'),
+        ('max_hari_monitoring', '31', 'Maksimal hari standby per bulan untuk Monitoring'),
     ]
     with connect_db() as conn:
         cur = conn.cursor()

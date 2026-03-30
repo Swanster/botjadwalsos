@@ -2,123 +2,112 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="flex flex-col space-y-4 md:space-y-6">
-    <div class="flex flex-col gap-1">
-        <h2 class="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <p class="text-muted-foreground">Ikhtisar jadwal standby hari ini</p>
-    </div>
-
-    <!-- Today's Overview -->
-    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <!-- Jadwal Hari Ini -->
-        <div class="card md:col-span-2 lg:col-span-1">
-            <div class="card-header flex flex-row items-center justify-between space-y-0 pb-2">
-                <h3 class="text-sm font-medium">Jadwal Hari Ini</h3>
-                <span class="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-1 rounded-full uppercase tracking-wider">{{ today_str }}</span>
-            </div>
-            <div class="card-content">
-                {% if jadwal_hari_ini %}
-                    <div class="space-y-4">
-                        {% for j in jadwal_hari_ini %}
-                            <div class="flex items-center gap-4 p-3 rounded-lg border bg-accent/30">
-                                <div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
-                                    {{ j.username[0]|upper }}
+<div class="flex flex-col space-y-10 animate-in fade-in duration-700">
+    <!-- Header Section -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex flex-col gap-1">
+                <div class="card-header border-b flex flex-row items-center justify-between pb-3 bg-muted/20">
+                    <div class="flex items-center gap-3">
+                        <div class="w-1.5 h-6 bg-primary rounded-full"></div>
+                        <h3 class="text-lg font-bold">🎯 Petugas Standby Hari Ini</h3>
+                    </div>
+                </div>
+                <div class="card-content p-6">
+                    {% if jadwal_hari_ini %}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {% for j in jadwal_hari_ini %}
+                                <div class="group flex items-center gap-4 p-4 rounded-xl border bg-card hover:bg-accent/30 hover:border-primary/30 transition-all cursor-default">
+                                    <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg border border-primary/20 shadow-inner group-hover:scale-105 transition-transform">
+                                        {{ j.username[0]|upper }}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <p class="font-bold truncate text-foreground">{{ j.username }}</p>
+                                            <span class="text-[8px] bg-primary/10 text-primary px-1.5 py-0.5 rounded uppercase font-bold">{{ j.group_name }}</span>
+                                        </div>
+                                        {% if j.telegram_username %}
+                                            <p class="text-xs text-muted-foreground font-medium truncate">@{{ j.telegram_username }}</p>
+                                        {% endif %}
+                                    </div>
                                 </div>
-                                <div class="flex-1 min-w-0">
-                                    <p class="text-sm font-semibold truncate">{{ j.username }}</p>
-                                    {% if j.telegram_username %}
-                                        <p class="text-xs text-muted-foreground truncate">@{{ j.telegram_username }}</p>
-                                    {% endif %}
-                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="flex flex-col items-center justify-center py-16 text-center space-y-4">
+                            <div class="w-20 h-20 rounded-full bg-muted flex items-center justify-center text-4xl grayscale opacity-50">💤</div>
+                            <div class="space-y-1">
+                                <p class="text-lg font-bold text-muted-foreground">Tidak Ada Petugas</p>
+                                <p class="text-xs text-muted-foreground italic">Semua slot kosong untuk hari ini.</p>
                             </div>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <div class="flex flex-col items-center justify-center py-8 text-center space-y-2">
-                        <span class="text-3xl">📭</span>
-                        <p class="text-sm text-muted-foreground italic">Tidak ada yang bertugas hari ini</p>
-                    </div>
-                {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
             </div>
+
+            <!-- Recently Opened Month Alert -->
+            {% if bulan_dibuka %}
+            <div class="p-6 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="flex items-center gap-4 text-center md:text-left">
+                    <div class="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center text-xl shadow-lg shadow-primary/20 animate-pulse">📅</div>
+                    <div>
+                        <p class="text-sm font-bold">Input Jadwal Terbuka!</p>
+                        <p class="text-xs text-muted-foreground">Periode input <span class="text-foreground font-bold">{{ bulan_dibuka.bulan }}/{{ bulan_dibuka.tahun }}</span> sekarang sedang berlangsung.</p>
+                    </div>
+                </div>
+                <a href="{{ url_for('schedules') }}" class="btn btn-primary px-6 text-xs font-bold whitespace-nowrap">
+                    Buka Kalender
+                </a>
+            </div>
+            {% endif %}
         </div>
-        
-        <!-- Stats Card -->
-        <div class="card">
-            <div class="card-header pb-2">
-                <h3 class="text-sm font-medium">Statistik Member</h3>
-            </div>
-            <div class="card-content">
-                <div class="grid grid-cols-3 gap-4">
-                    <div class="flex flex-col items-center justify-center p-4 rounded-md border bg-muted/50">
-                        <span class="text-2xl font-bold text-primary">{{ members_infra|length }}</span>
-                        <span class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">INFRA</span>
+
+        <!-- Right: Activity & Quick Info -->
+        <div class="space-y-6">
+            <!-- Summary Stats -->
+            <div class="card h-fit">
+                <div class="card-header border-b pb-3">
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                        <span>📈</span> Ringkasan Performa
+                    </h3>
+                </div>
+                <div class="card-content p-6 space-y-6">
+                    <div class="flex flex-col gap-1">
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-4xl font-extrabold tracking-tighter text-primary">{{ jadwal_bulan_ini|length }}</span>
+                            <span class="text-xs text-muted-foreground font-semibold uppercase">Slot Terisi</span>
+                        </div>
+                        <div class="w-full bg-muted h-2 rounded-full overflow-hidden mt-2">
+                            <div class="bg-primary h-full" style="width: 65%;"></div>
+                        </div>
+                        <p class="text-[10px] text-muted-foreground mt-1 italic">Total kehadiran terdaftar bulan ini.</p>
                     </div>
-                    <div class="flex flex-col items-center justify-center p-4 rounded-md border bg-muted/50">
-                        <span class="text-2xl font-bold text-primary">{{ members_ce|length }}</span>
-                        <span class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">CE</span>
-                    </div>
-                    <div class="flex flex-col items-center justify-center p-4 rounded-md border bg-muted/50">
-                        <span class="text-2xl font-bold text-primary">{{ members_apps|length }}</span>
-                        <span class="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">APPS</span>
+
+                    <div class="pt-4 border-t space-y-3">
+                        <p class="text-xs font-bold text-muted-foreground uppercase">Link Cepat</p>
+                        <div class="grid grid-cols-1 gap-2">
+                            <a href="{{ url_for('daily_limits') }}" class="flex items-center justify-between p-3 rounded-lg border bg-accent/20 hover:bg-accent/40 transition-colors text-xs font-medium">
+                                <span>⚖️ Kelola Batasan</span>
+                                <span>→</span>
+                            </a>
+                            <a href="{{ url_for('logs') }}" class="flex items-center justify-between p-3 rounded-lg border bg-accent/20 hover:bg-accent/40 transition-colors text-xs font-medium">
+                                <span>📜 Log Aktivitas</span>
+                                <span>→</span>
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        
-        <!-- Limits Card -->
-        <div class="card">
-            <div class="card-header pb-2">
-                <h3 class="text-sm font-medium">Batasan Harian</h3>
-            </div>
-            <div class="card-content space-y-4">
-                <p class="text-sm text-muted-foreground">Sistem menggunakan batasan assignment harian yang fleksibel.</p>
-                <a href="{{ url_for('daily_limits') }}" class="btn btn-secondary w-full text-xs font-bold uppercase tracking-wide">
-                    Kelola Batasan
-                </a>
-            </div>
-        </div>
-    </div>
 
-    <!-- Quick Actions -->
-    <div class="space-y-4">
-        <h3 class="text-lg font-semibold border-l-4 border-primary pl-3">Aksi Cepat</h3>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <a href="{{ url_for('schedules') }}" class="btn btn-ghost border justify-start h-14 px-5">
-                <span class="mr-3 text-xl">📅</span>
-                <span class="font-medium">Input Jadwal Manual</span>
-            </a>
-            <a href="{{ url_for('members') }}" class="btn btn-ghost border justify-start h-14 px-5">
-                <span class="mr-3 text-xl">👥</span>
-                <span class="font-medium">Kelola Member</span>
-            </a>
-            <a href="{{ url_for('daily_limits') }}" class="btn btn-ghost border justify-start h-14 px-5">
-                <span class="mr-3 text-xl">⚖️</span>
-                <span class="font-medium">Detail Batasan</span>
-            </a>
-        </div>
-    </div>
-
-    <!-- Month Status -->
-    {% if bulan_dibuka %}
-    <div class="p-4 rounded-lg border-2 border-dashed border-primary/20 bg-primary/5">
-        <div class="flex items-center gap-3">
-            <span class="flex h-3 w-3 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]"></span>
-            <p class="text-sm font-medium">
-                Jadwal untuk bulan <span class="font-bold underline underline-offset-4">{{ bulan_dibuka.bulan }}/{{ bulan_dibuka.tahun }}</span> sedang <span class="text-green-500 font-bold">DIBUKA</span>
-            </p>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- Recent Schedule Summary -->
-    <div class="card">
-        <div class="card-header pb-2">
-            <h3 class="text-sm font-medium">Ringkasan Jadwal Bulan Ini</h3>
-        </div>
-        <div class="card-content">
-            <div class="flex items-baseline gap-2">
-                <span class="text-3xl font-bold tracking-tighter">{{ jadwal_bulan_ini|length }}</span>
-                <span class="text-sm text-muted-foreground font-medium uppercase tracking-wider">Slot Terisi</span>
+            <!-- Pro Banner -->
+            <div class="card bg-gradient-to-br from-slate-900 to-indigo-950 text-white border-0 shadow-2xl relative overflow-hidden group">
+                <div class="absolute -right-10 -bottom-10 w-32 h-32 bg-primary/20 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
+                <div class="card-content p-6 relative z-10 flex flex-col gap-4">
+                    <div class="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-xl">💡</div>
+                    <div>
+                        <h4 class="font-bold text-lg">Tips Efisiensi</h4>
+                        <p class="text-xs text-slate-400 mt-1 leading-relaxed">Gunakan fitur <b>Batasan Harian</b> untuk menjaga beban kerja tim agar tetap seimbang secara otomatis.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

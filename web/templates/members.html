@@ -2,147 +2,106 @@
 {% block title %}Kelola Member{% endblock %}
 
 {% block content %}
-<div class="flex flex-col space-y-6">
-    <div class="flex flex-col gap-1">
-        <h2 class="text-3xl font-bold tracking-tight">Kelola Member</h2>
-        <p class="text-muted-foreground">Tambah, edit, atau hapus member dari tim</p>
+<div class="flex flex-col space-y-8 animate-in fade-in duration-700">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex flex-col gap-1">
+            <h2 class="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent">👥 Database Anggota</h2>
+            <p class="text-muted-foreground">Manajemen personil, registrasi anggota baru, dan pengelolaan divisi operasional.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="document.getElementById('add-member-form').scrollIntoView({behavior: 'smooth'})" class="btn btn-primary gap-2">
+                <span>➕</span> Tambah Anggota
+            </button>
+        </div>
     </div>
 
-    <!-- Add Member Form -->
-    <div class="card">
-        <div class="card-header pb-3">
-            <h3 class="card-title text-lg">Tambah Member Baru</h3>
+    <!-- Add Member Form Card -->
+    <div id="add-member-form" class="card border-primary/20 bg-gradient-to-br from-card to-primary/5">
+        <div class="card-header border-b pb-4">
+            <h3 class="card-title text-lg flex items-center gap-2">
+                <span class="text-primary group-hover:scale-110 transition-transform">➕</span>
+                Registrasi Member Baru
+            </h3>
         </div>
-        <div class="card-content">
+        <div class="card-content p-6">
             <form method="POST" action="{{ url_for('add_member') }}">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-                    <div class="space-y-2 lg:col-span-1">
-                        <label for="user_id" class="text-sm font-medium">User ID</label>
-                        <input type="number" id="user_id" name="user_id" required class="input" placeholder="Contoh: 12345678">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 items-end">
+                    <div class="space-y-2 lg:col-span-2">
+                        <label for="user_id" class="text-xs font-bold uppercase text-muted-foreground tracking-wider">User ID</label>
+                        <input type="number" id="user_id" name="user_id" required class="input focus:ring-primary/40" placeholder="ID Telegram">
                     </div>
-                    <div class="space-y-2 lg:col-span-1">
-                        <label for="username" class="text-sm font-medium">Nama</label>
-                        <input type="text" id="username" name="username" required class="input" placeholder="Nama Lengkap">
+                    <div class="space-y-2 lg:col-span-3">
+                        <label for="username" class="text-xs font-bold uppercase text-muted-foreground tracking-wider">Nama Lengkap</label>
+                        <input type="text" id="username" name="username" required class="input focus:ring-primary/40" placeholder="Contoh: Budi Santoso">
                     </div>
-                    <div class="space-y-2 lg:col-span-1">
-                        <label for="telegram_username" class="text-sm font-medium">Telegram</label>
-                        <input type="text" id="telegram_username" name="telegram_username" class="input" placeholder="username (tanpa @)">
+                    <div class="space-y-2 lg:col-span-3">
+                        <label for="telegram_username" class="text-xs font-bold uppercase text-muted-foreground tracking-wider">Username Telegram</label>
+                        <input type="text" id="telegram_username" name="telegram_username" class="input focus:ring-primary/40" placeholder="Contoh: budisantoso">
                     </div>
-                    <div class="space-y-2 lg:col-span-1">
-                        <label for="group_name" class="text-sm font-medium">Grup</label>
-                        <select id="group_name" name="group_name" required class="input">
+                    <div class="space-y-2 lg:col-span-2">
+                        <label for="group_name" class="text-xs font-bold uppercase text-muted-foreground tracking-wider">Divisi</label>
+                        <select id="group_name" name="group_name" required class="input focus:ring-primary/40">
                             <option value="INFRA">INFRA</option>
                             <option value="CE">CE</option>
                             <option value="APPS">APPS</option>
+                            <option value="MONITORING">MONITORING</option>
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary lg:col-span-1 w-full">
-                        Tambah Member
-                    </button>
+                    <div class="lg:col-span-2">
+                        <button type="submit" class="btn btn-primary w-full shadow-lg shadow-primary/20">Tambah</button>
+                    </div>
                 </div>
             </form>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- INFRA Members -->
-        <div class="card flex flex-col">
-            <div class="card-header border-b bg-muted/30">
-                <div class="flex items-center justify-between">
-                    <h3 class="card-title text-base font-bold uppercase tracking-wider">Tim INFRA</h3>
-                    <span class="text-xs font-medium bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">{{ members_infra|length }} Member</span>
-                </div>
-            </div>
-            <div class="card-content p-0 flex-1 overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b bg-muted/50 transition-colors">
-                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Nama</th>
-                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Telegram</th>
-                            <th class="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        {% for member in members_infra %}
-                        <tr class="hover:bg-muted/50 transition-colors">
-                            <td class="p-4 align-middle">
-                                <div class="font-medium">{{ member.username }}</div>
-                                <div class="text-[10px] text-muted-foreground">ID: {{ member.user_id }}</div>
-                            </td>
-                            <td class="p-4 align-middle">
-                                {% if member.telegram_username %}
-                                    <span class="text-primary hover:underline">@{{ member.telegram_username }}</span>
-                                {% else %}
-                                    <span class="text-muted-foreground italic">-</span>
-                                {% endif %}
-                            </td>
-                            <td class="p-4 align-middle text-right">
-                                <div class="flex items-center justify-end gap-2">
-                                    <button type="button" class="btn btn-ghost h-8 w-8 p-0 edit-member-btn" 
-                                            data-user-id="{{ member.user_id }}"
-                                            data-username="{{ member.username|e }}"
-                                            data-telegram="{{ member.telegram_username|e }}"
-                                            data-group="{{ member.group_name or 'INFRA' }}">
-                                        <span>✏️</span>
-                                    </button>
-                                    <form method="POST" action="{{ url_for('delete_member', user_id=member.user_id) }}" 
-                                          onsubmit="return confirm('Hapus member {{ member.username }}?')">
-                                        <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50">
-                                            <span>🗑️</span>
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+    <!-- Group Cards Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        {% set groups = [
+            ('INFRA', '🏗️', 'Infrastruktur & Jaringan', 'primary', members_infra),
+            ('CE', '📠', 'Customer Excellence', 'blue-500', members_ce),
+            ('APPS', '📱', 'Applications & Systems', 'purple-500', members_apps),
+            ('MONITORING', '👁️', 'Service Monitoring', 'teal-500', members_monitoring)
+        ] %}
 
-        <!-- CE Members -->
-        <div class="card flex flex-col">
-            <div class="card-header border-b bg-muted/30">
-                <div class="flex items-center justify-between">
-                    <h3 class="card-title text-base font-bold uppercase tracking-wider">Tim CE</h3>
-                    <span class="text-xs font-medium bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">{{ members_ce|length }} Member</span>
+        {% for group_id, icon, desc, color, members in groups %}
+        <div class="card group hover:shadow-lg transition-all duration-300 border-{{ color }}/20">
+            <div class="card-header bg-{{ color }}/5 flex flex-row items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-{{ color }}/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">{{ icon }}</div>
+                <div class="flex flex-col">
+                    <h3 class="text-lg font-bold leading-none">Divisi {{ group_id }}</h3>
+                    <p class="text-xs text-muted-foreground mt-1 text-{{ color }}">{{ desc }}</p>
                 </div>
+                <div class="ml-auto text-[10px] font-black bg-{{ color }}/10 text-{{ color }} px-3 py-1 rounded-full uppercase tracking-widest">{{ members|length }} Anggota</div>
             </div>
-            <div class="card-content p-0 flex-1 overflow-x-auto">
-                <table class="w-full text-sm">
+            <div class="card-content p-0 overflow-x-auto">
+                <table class="w-full text-xs">
                     <thead>
-                        <tr class="border-b bg-muted/50 transition-colors">
-                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Nama</th>
-                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Telegram</th>
-                            <th class="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Aksi</th>
+                        <tr class="bg-card/50 text-muted-foreground">
+                            <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b whitespace-nowrap">Nama Anggota</th>
+                            <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b">Username</th>
+                            <th class="h-12 px-6 text-right font-bold uppercase tracking-widest border-b whitespace-nowrap">Aksi</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y">
-                        {% for member in members_ce %}
-                        <tr class="hover:bg-muted/50 transition-colors">
-                            <td class="p-4 align-middle">
-                                <div class="font-medium">{{ member.username }}</div>
-                                <div class="text-[10px] text-muted-foreground">ID: {{ member.user_id }}</div>
-                            </td>
-                            <td class="p-4 align-middle">
-                                {% if member.telegram_username %}
-                                    <span class="text-primary hover:underline">@{{ member.telegram_username }}</span>
-                                {% else %}
-                                    <span class="text-muted-foreground italic">-</span>
-                                {% endif %}
-                            </td>
-                            <td class="p-4 align-middle text-right">
+                    <tbody class="divide-y divide-{{ color }}/5">
+                        {% for member in members %}
+                        <tr class="hover:bg-muted/50 transition-colors group/row">
+                            <td class="p-6 align-middle font-bold text-foreground">{{ member.username }}</td>
+                            <td class="p-6 align-middle font-mono text-muted-foreground text-[10px]">@{{ member.telegram_username }}</td>
+                            <td class="p-6 align-middle text-right">
                                 <div class="flex items-center justify-end gap-2">
                                     <button type="button" class="btn btn-ghost h-8 w-8 p-0 edit-member-btn" 
                                             data-user-id="{{ member.user_id }}"
                                             data-username="{{ member.username|e }}"
                                             data-telegram="{{ member.telegram_username|e }}"
-                                            data-group="{{ member.group_name or 'CE' }}">
+                                            data-group="{{ member.group_name or group_id }}">
                                         <span>✏️</span>
                                     </button>
                                     <form method="POST" action="{{ url_for('delete_member', user_id=member.user_id) }}" 
                                           onsubmit="return confirm('Hapus member {{ member.username }}?')">
-                                        <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50">
+                                        <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:bg-red-50">
                                             <span>🗑️</span>
                                         </button>
                                     </form>
@@ -154,96 +113,46 @@
                 </table>
             </div>
         </div>
-
-        <!-- APPS Members -->
-        <div class="card flex flex-col">
-            <div class="card-header border-b bg-muted/30">
-                <div class="flex items-center justify-between">
-                    <h3 class="card-title text-base font-bold uppercase tracking-wider">Tim APPS</h3>
-                    <span class="text-xs font-medium bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">{{ members_apps|length }} Member</span>
-                </div>
-            </div>
-            <div class="card-content p-0 flex-1 overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b bg-muted/50 transition-colors">
-                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Nama</th>
-                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Telegram</th>
-                            <th class="h-10 px-4 text-right align-middle font-medium text-muted-foreground">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        {% for member in members_apps %}
-                        <tr class="hover:bg-muted/50 transition-colors">
-                            <td class="p-4 align-middle">
-                                <div class="font-medium">{{ member.username }}</div>
-                                <div class="text-[10px] text-muted-foreground">ID: {{ member.user_id }}</div>
-                            </td>
-                            <td class="p-4 align-middle">
-                                {% if member.telegram_username %}
-                                    <span class="text-primary hover:underline">@{{ member.telegram_username }}</span>
-                                {% else %}
-                                    <span class="text-muted-foreground italic">-</span>
-                                {% endif %}
-                            </td>
-                            <td class="p-4 align-middle text-right">
-                                <div class="flex items-center justify-end gap-2">
-                                    <button type="button" class="btn btn-ghost h-8 w-8 p-0 edit-member-btn" 
-                                            data-user-id="{{ member.user_id }}"
-                                            data-username="{{ member.username|e }}"
-                                            data-telegram="{{ member.telegram_username|e }}"
-                                            data-group="{{ member.group_name or 'APPS' }}">
-                                        <span>✏️</span>
-                                    </button>
-                                    <form method="POST" action="{{ url_for('delete_member', user_id=member.user_id) }}" 
-                                          onsubmit="return confirm('Hapus member {{ member.username }}?')">
-                                        <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50">
-                                            <span>🗑️</span>
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        {% endfor %}
     </div>
 </div>
 
 <!-- Edit Member Modal -->
 <div id="editMemberModal" class="fixed inset-0 z-50 hidden">
-    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-md"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="card w-full max-w-md bg-background animate-in zoom-in-95 duration-200">
-            <div class="card-header border-b flex flex-row items-center justify-between py-4">
-                <h3 class="card-title text-xl">Edit Member</h3>
-                <button onclick="closeEditModal()" class="text-2xl leading-none text-muted-foreground hover:text-foreground">&times;</button>
+        <div class="card w-full max-w-md bg-background shadow-2xl animate-in zoom-in-95 duration-200 border-primary/20">
+            <div class="card-header border-b flex flex-row items-center justify-between py-5">
+                <div class="flex items-center gap-3">
+                    <span class="text-xl">✏️</span>
+                    <h3 class="card-title text-xl tracking-tight">Edit Detail Anggota</h3>
+                </div>
+                <button onclick="closeEditModal()" class="text-2xl leading-none text-muted-foreground hover:text-foreground hover:scale-110 transition-all">&times;</button>
             </div>
-            <div class="card-content p-6">
+            <div class="card-content p-8">
                 <form id="editMemberForm" method="POST">
-                    <div class="space-y-4">
+                    <div class="space-y-6">
                         <input type="hidden" id="edit_user_id" name="user_id">
                         <div class="space-y-2">
-                            <label for="edit_username" class="text-sm font-medium">Nama</label>
-                            <input type="text" id="edit_username" name="username" required class="input">
+                            <label for="edit_username" class="text-xs font-bold uppercase text-muted-foreground tracking-widest">Nama Lengkap</label>
+                            <input type="text" id="edit_username" name="username" required class="input focus:ring-primary/40">
                         </div>
                         <div class="space-y-2">
-                            <label for="edit_telegram_username" class="text-sm font-medium">Telegram</label>
-                            <input type="text" id="edit_telegram_username" name="telegram_username" class="input">
+                            <label for="edit_telegram_username" class="text-xs font-bold uppercase text-muted-foreground tracking-widest">Username Telegram</label>
+                            <input type="text" id="edit_telegram_username" name="telegram_username" class="input focus:ring-primary/40">
                         </div>
                         <div class="space-y-2">
-                            <label for="edit_group_name" class="text-sm font-medium">Grup</label>
-                            <select id="edit_group_name" name="group_name" required class="input">
+                            <label for="edit_group_name" class="text-xs font-bold uppercase text-muted-foreground tracking-widest">Penugasan Divisi</label>
+                            <select id="edit_group_name" name="group_name" required class="input focus:ring-primary/40 appearance-none bg-background">
                                 <option value="INFRA">INFRA</option>
                                 <option value="CE">CE</option>
                                 <option value="APPS">APPS</option>
+                                <option value="MONITORING">MONITORING</option>
                             </select>
                         </div>
-                        <div class="flex gap-2 pt-4">
-                            <button type="submit" class="btn btn-primary flex-1">Simpan Perbarui</button>
-                            <button type="button" class="btn btn-secondary flex-1" onclick="closeEditModal()">Batal</button>
+                        <div class="flex gap-4 pt-6">
+                            <button type="button" class="btn btn-secondary flex-1" onclick="closeEditModal()">Batalkan</button>
+                            <button type="submit" class="btn btn-primary flex-1 shadow-lg shadow-primary/20 text-white">Simpan Perubahan</button>
                         </div>
                     </div>
                 </form>

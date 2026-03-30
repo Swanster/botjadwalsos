@@ -20,7 +20,8 @@ from core.database import (
     get_bulan_dibuka, format_tanggal_indonesia,
     create_tables, init_default_admin,
     set_daily_limit, get_all_daily_limits, delete_daily_limit, get_daily_limit,
-    is_date_full, add_audit_log, get_audit_logs
+    is_date_full, add_audit_log, get_audit_logs,
+    get_all_settings, set_setting
 )
 
 # =============================================================================
@@ -112,6 +113,7 @@ def create_app():
         members_infra = get_all_users_in_group('INFRA')
         members_ce = get_all_users_in_group('CE')
         members_apps = get_all_users_in_group('APPS')
+        members_monitoring = get_all_users_in_group('MONITORING')
         
         # Get open month info
         bulan_dibuka = get_bulan_dibuka()
@@ -124,6 +126,7 @@ def create_app():
             members_infra=members_infra,
             members_ce=members_ce,
             members_apps=members_apps,
+            members_monitoring=members_monitoring,
             bulan_dibuka=bulan_dibuka
         )
 
@@ -137,10 +140,12 @@ def create_app():
         members_infra = get_all_users_in_group('INFRA')
         members_ce = get_all_users_in_group('CE')
         members_apps = get_all_users_in_group('APPS')
+        members_monitoring = get_all_users_in_group('MONITORING')
         return render_template('members.html', 
             members_infra=members_infra, 
             members_ce=members_ce,
-            members_apps=members_apps
+            members_apps=members_apps,
+            members_monitoring=members_monitoring
         )
     
     @app.route('/members/add', methods=['POST'])
@@ -210,7 +215,8 @@ def create_app():
         members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
         members_ce = [dict(m) for m in get_all_users_in_group('CE')]
         members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
-        all_members = members_infra + members_ce + members_apps
+        members_monitoring = [dict(m) for m in get_all_users_in_group('MONITORING')]
+        all_members = members_infra + members_ce + members_apps + members_monitoring
         
         # Calendar info
         cal = calendar.Calendar(firstweekday=calendar.MONDAY)
@@ -266,7 +272,8 @@ def create_app():
             members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
             members_ce = [dict(m) for m in get_all_users_in_group('CE')]
             members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
-            members = members_infra + members_ce + members_apps
+            members_monitoring = [dict(m) for m in get_all_users_in_group('MONITORING')]
+            members = members_infra + members_ce + members_apps + members_monitoring
             
             username = ''
             telegram_username = ''
@@ -405,6 +412,33 @@ def create_app():
             flash('Gagal mereset password.', 'error')
         
         return redirect(url_for('admins'))
+
+    # =============================================================================
+    # ROUTES - SETTINGS
+    # =============================================================================
+    
+    @app.route('/settings', methods=['GET', 'POST'])
+    @login_required
+    def settings():
+        if request.method == 'POST':
+            # Update all settings from form
+            keys = [
+                'kuota_infra', 'kuota_ce', 'kuota_apps', 'kuota_monitoring',
+                'max_hari_infra', 'max_hari_ce', 'max_hari_apps', 'max_hari_monitoring'
+            ]
+            
+            for key in keys:
+                value = request.form.get(key)
+                if value is not None:
+                    set_setting(key, value)
+            
+            add_audit_log(current_user.username, 'UPDATE_SETTINGS', 'Memperbarui batasan kuota per grup')
+            flash('Pengaturan kuota berhasil diperbarui.', 'success')
+            return redirect(url_for('settings'))
+            
+        all_settings = get_all_settings()
+        return render_template('settings.html', settings=all_settings)
+
 
     # =============================================================================
     # ROUTES - DAILY LIMITS

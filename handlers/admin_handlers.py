@@ -133,7 +133,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         # Minta admin untuk mengirim file
         msg = bot.reply_to(message, "Silakan kirim file `.csv` Anda.\n\n"
                                     "Format kolom harus: `user_id,username,telegram_username,group_name`\n"
-                                    "Contoh: `123456,Budi,budisan,INFRA` atau `789012,Susi,susian,APPS`")
+                                    "Contoh: `123456,Budi,budisan,INFRA` atau `789012,Susi,susian,MONITORING`")
         bot.register_next_step_handler(msg, process_csv_file)
 
     def process_csv_file(message):
@@ -165,7 +165,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
                     telegram_username = row[2].strip().lstrip('@')
                     group_name = row[3].strip().upper()
                     
-                    if group_name not in ['INFRA', 'CE', 'APPS']:
+                    if group_name not in ['INFRA', 'CE', 'APPS', 'MONITORING']:
                         raise ValueError(f"Grup tidak valid: {group_name}")
 
                     # Simpan ke database

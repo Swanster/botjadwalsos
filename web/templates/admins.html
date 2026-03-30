@@ -2,114 +2,140 @@
 {% block title %}Kelola Admin{% endblock %}
 
 {% block content %}
-<div class="flex flex-col space-y-6">
-    <div class="flex flex-col gap-1">
-        <h2 class="text-3xl font-bold tracking-tight">Admin User</h2>
-        <p class="text-muted-foreground">Kelola akun administrator untuk akses dashboard</p>
-    </div>
-
-    <!-- Add Admin Form -->
-    <div class="card max-w-xl">
-        <div class="card-header pb-3">
-            <h3 class="card-title text-lg">Tambah Admin Baru</h3>
-        </div>
-        <div class="card-content">
-            <form method="POST" action="{{ url_for('add_admin') }}">
-                <div class="space-y-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div class="space-y-2">
-                            <label for="username" class="text-sm font-medium">Username</label>
-                            <input type="text" id="username" name="username" required class="input" placeholder="Username admin">
-                        </div>
-                        <div class="space-y-2">
-                            <label for="password" class="text-sm font-medium">Password</label>
-                            <input type="password" id="password" name="password" required class="input" placeholder="Password admin">
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-full">Tambah Admin</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Admin List -->
-    <div class="card">
-        <div class="card-header border-b bg-muted/30">
-            <h3 class="card-title text-base font-bold uppercase tracking-wider">Daftar Administrator</h3>
-        </div>
-        <div class="card-content p-0 overflow-x-auto">
-            {% if admins %}
-            <table class="w-full text-sm">
-                <thead>
-                    <tr class="border-b bg-muted/50 transition-colors">
-                        <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground font-bold">Username</th>
-                        <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground font-bold hidden sm:table-cell">Dibuat Pada</th>
-                        <th class="h-10 px-4 text-right align-middle font-medium text-muted-foreground font-bold">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y">
-                    {% for admin in admins %}
-                    <tr class="hover:bg-muted/50 transition-colors">
-                        <td class="p-4 align-middle">
-                            <div class="flex items-center gap-2">
-                                <span class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">{{ admin.username[0]|upper }}</span>
-                                <span class="font-medium">{{ admin.username }}</span>
-                            </div>
-                        </td>
-                        <td class="p-4 align-middle text-muted-foreground text-xs hidden sm:table-cell">{{ admin.created_at[:16] }}</td>
-                        <td class="p-4 align-middle text-right">
-                            <div class="flex items-center justify-end gap-2">
-                                <button type="button" class="btn btn-ghost h-8 w-8 p-0 reset-pwd-btn" 
-                                        data-admin-id="{{ admin.id }}"
-                                        data-username="{{ admin.username|e }}">
-                                    <span>🔑</span>
-                                </button>
-                                <form method="POST" action="{{ url_for('delete_admin', admin_id=admin.id) }}" 
-                                      onsubmit="return confirm('Hapus admin {{ admin.username }}?')">
-                                    <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:text-red-600">
-                                        <span>🗑️</span>
-                                    </button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="flex flex-col items-center justify-center py-12 text-center">
-                <p class="font-bold">Belum ada admin</p>
+<div class="flex flex-col space-y-10 animate-in fade-in duration-1000">
+    <!-- Header Section -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-2 text-primary font-black text-[10px] uppercase tracking-[0.3em] mb-1">
+                <span class="w-8 h-[2px] bg-primary rounded-full"></span>
+                Governance & Security
             </div>
-            {% endif %}
+            <h2 class="text-4xl font-black tracking-tighter bg-gradient-to-r from-primary via-orange-400 to-primary bg-clip-text text-transparent">🔐 Administrasi Sistem</h2>
+            <p class="text-muted-foreground text-sm max-w-xl">Konfigurasi hak akses dan manajemen tingkat lanjut personil pengelola dashboard.</p>
+        </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-10 items-start">
+        <!-- Add Admin Form -->
+        <div class="xl:col-span-1">
+            <div class="card border-primary/20 overflow-hidden shadow-2xl shadow-primary/5">
+                <div class="card-header bg-primary/5 p-6 border-b border-primary/10">
+                    <h3 class="text-sm font-black uppercase tracking-widest text-primary">Registrasi Administrator</h3>
+                    <p class="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter mt-1 italic">Kredensial akses dashboard utama</p>
+                </div>
+                <div class="card-content p-8">
+                    <form method="POST" action="{{ url_for('add_admin') }}" class="space-y-6">
+                        <div class="space-y-4">
+                            <div class="space-y-2">
+                                <label for="username" class="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Username Identitas</label>
+                                <input type="text" id="username" name="username" required class="input focus:ring-primary/40 bg-muted/20" placeholder="e.g. admin_prime">
+                            </div>
+                            <div class="space-y-2">
+                                <label for="password" class="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Kunci Akses</label>
+                                <input type="password" id="password" name="password" required class="input focus:ring-primary/40 bg-muted/20" placeholder="••••••••">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-full py-6 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-primary/20 flex items-center justify-center gap-3 group">
+                            <span>Sahkan Admin</span>
+                            <span class="group-hover:translate-x-1 transition-transform">→</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin List -->
+        <div class="xl:col-span-2">
+            <div class="card border-primary/10 overflow-hidden">
+                <div class="card-header bg-muted/20 p-6 flex items-center justify-between">
+                    <h3 class="text-xs font-black uppercase tracking-widest text-muted-foreground">Arsip Administrator Aktif</h3>
+                    <div class="flex items-center gap-4 text-[10px] font-black">
+                        <span class="text-primary tracking-tighter italic">● HIGH SECURITY</span>
+                    </div>
+                </div>
+                <div class="card-content p-0 overflow-x-auto">
+                    {% if admins %}
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="bg-card/50 text-muted-foreground border-b border-primary/5">
+                                <th class="h-12 px-6 text-left font-black uppercase tracking-widest">Identitas Profil</th>
+                                <th class="h-12 px-6 text-left font-black uppercase tracking-widest hidden sm:table-cell">Waktu Pendaftaran</th>
+                                <th class="h-12 px-6 text-right font-black uppercase tracking-widest">Kontrol Akses</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-primary/5">
+                            {% for admin in admins %}
+                            <tr class="hover:bg-primary/[0.02] transition-colors group">
+                                <td class="p-6 align-middle">
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-orange-400/20 flex items-center justify-center text-primary font-black text-sm border border-primary/20 shadow-sm">
+                                            {{ admin.username[0]|upper }}
+                                        </div>
+                                        <div class="flex flex-col">
+                                            <span class="font-black text-foreground tracking-tight text-sm">{{ admin.username }}</span>
+                                            <span class="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Authorized</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="p-6 align-middle hidden sm:table-cell">
+                                    <span class="font-bold text-muted-foreground/60 tracking-tighter">{{ admin.created_at[:16] }}</span>
+                                </td>
+                                <td class="p-6 align-middle">
+                                    <div class="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button type="button" class="btn h-9 w-9 p-0 bg-accent/30 hover:bg-primary/20 text-primary border border-primary/10 rounded-lg reset-pwd-btn transition-all" 
+                                                data-admin-id="{{ admin.id }}"
+                                                data-username="{{ admin.username|e }}">
+                                            <span class="text-xs">🔑</span>
+                                        </button>
+                                        <form method="POST" action="{{ url_for('delete_admin', admin_id=admin.id) }}" 
+                                              onsubmit="return confirm('Cabut akses admin {{ admin.username }}?')">
+                                            <button type="submit" class="btn h-9 w-9 p-0 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/10 rounded-lg transition-all">
+                                                <span class="text-xs">🗑️</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="flex flex-col items-center justify-center py-20 grayscale opacity-30">
+                        <span class="text-6xl mb-4">🌑</span>
+                        <p class="font-black uppercase tracking-widest text-xs">Akses Terbatas</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Reset Password Modal -->
-<div id="resetPasswordModal" class="fixed inset-0 z-50 hidden">
-    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
-    <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="card w-full max-w-md bg-background animate-in zoom-in-95 duration-200">
-            <div class="card-header border-b flex flex-row items-center justify-between py-4">
-                <h3 class="card-title text-xl">Reset Password Admin</h3>
-                <button onclick="closeResetPasswordModal()" class="text-2xl leading-none text-muted-foreground hover:text-foreground">&times;</button>
-            </div>
-            <div class="card-content p-6">
-                <form id="resetPasswordForm" method="POST">
-                    <div class="space-y-4">
-                        <p class="text-sm text-muted-foreground">Reset password untuk admin: <span id="reset_username_display" class="font-bold text-foreground"></span></p>
-                        <input type="hidden" id="reset_admin_id" name="admin_id">
-                        <div class="space-y-2">
-                            <label for="new_password" class="text-sm font-medium">Password Baru</label>
-                            <input type="password" id="new_password" name="new_password" required minlength="6" class="input">
-                        </div>
-                        <div class="flex gap-2 pt-4">
-                            <button type="submit" class="btn btn-primary flex-1">Reset Password</button>
-                            <button type="button" class="btn btn-secondary flex-1" onclick="closeResetPasswordModal()">Batal</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
+<!-- Premium Reset Password Modal -->
+<div id="resetPasswordModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-6 animate-in fade-in duration-300">
+    <div class="absolute inset-0 bg-background/80 backdrop-blur-xl transition-opacity"></div>
+    <div class="relative w-full max-w-md card border-primary/20 bg-card shadow-2xl scale-in-95 duration-200">
+        <div class="card-header border-b border-primary/5 p-6 flex items-center justify-between">
+            <h3 class="text-xl font-black tracking-tighter">Perbarui Kunci Akses</h3>
+            <button onclick="closeResetPasswordModal()" class="w-8 h-8 rounded-lg hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">&times;</button>
+        </div>
+        <div class="card-content p-8">
+            <form id="resetPasswordForm" method="POST" class="space-y-6">
+                <div class="p-4 rounded-xl bg-primary/5 border border-primary/10 mb-2">
+                    <p class="text-[10px] uppercase font-black text-muted-foreground tracking-widest leading-relaxed">Administrator Target:</p>
+                    <p id="reset_username_display" class="text-lg font-black tracking-tighter text-foreground"></p>
+                </div>
+                <input type="hidden" id="reset_admin_id" name="admin_id">
+                <div class="space-y-2">
+                    <label for="new_password" class="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Password Baru</label>
+                    <input type="password" id="new_password" name="new_password" required minlength="6" class="input focus:ring-primary/40">
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="submit" class="btn btn-primary flex-1 shadow-lg shadow-primary/20">Eksekusi Reset</button>
+                    <button type="button" class="btn bg-muted/50 hover:bg-muted text-foreground flex-1" onclick="closeResetPasswordModal()">Batal</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -119,30 +145,24 @@ function showResetPasswordForm(adminId, username) {
     document.getElementById('reset_admin_id').value = adminId;
     document.getElementById('reset_username_display').textContent = username;
     document.getElementById('resetPasswordForm').action = '/admins/' + adminId + '/reset';
-    document.getElementById('resetPasswordModal').classList.remove('hidden');
+    const modal = document.getElementById('resetPasswordModal');
+    modal.classList.remove('hidden');
 }
 
 function closeResetPasswordModal() {
     document.getElementById('resetPasswordModal').classList.add('hidden');
 }
 
-// Event listener for reset buttons
 document.addEventListener('click', function(e) {
     const btn = e.target.closest('.reset-pwd-btn');
     if (btn) {
-        showResetPasswordForm(
-            btn.dataset.adminId,
-            btn.dataset.username
-        );
+        showResetPasswordForm(btn.dataset.adminId, btn.dataset.username);
     }
 });
 
-// Close modal when clicking outside
-window.onclick = function(event) {
-    const modal = document.getElementById('resetPasswordModal');
-    if (event.target == modal.children[0]) {
-        closeResetPasswordModal();
-    }
-}
+// Close on ESC
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeResetPasswordModal();
+});
 </script>
 {% endblock %}

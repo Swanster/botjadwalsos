@@ -2,167 +2,210 @@
 {% block title %}Jadwal Manual{% endblock %}
 
 {% block content %}
-<div class="flex flex-col space-y-6">
-    <div class="flex flex-col gap-1">
-        <h2 class="text-3xl font-bold tracking-tight">Input Jadwal Manual</h2>
-        <p class="text-muted-foreground">Tambahkan jadwal standby untuk member yang lupa input</p>
-    </div>
-
-    <!-- Month Navigation -->
-    <div class="flex items-center justify-between bg-card p-4 rounded-lg border shadow-sm">
-        {% set prev_month = month - 1 if month > 1 else 12 %}
-        {% set prev_year = year if month > 1 else year - 1 %}
-        {% set next_month = month + 1 if month < 12 else 1 %}
-        {% set next_year = year if month < 12 else year + 1 %}
-        
-        <a href="{{ url_for('schedules', year=prev_year, month=prev_month) }}" class="btn btn-ghost px-2 md:px-4">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="m15 18-6-6 6-6"/></svg>
-            <span class="hidden sm:inline">Sebelumnya</span>
-        </a>
-        <h3 class="text-lg font-bold">{{ month_name }} {{ year }}</h3>
-        <a href="{{ url_for('schedules', year=next_year, month=next_month) }}" class="btn btn-ghost px-2 md:px-4">
-            <span class="hidden sm:inline mr-2">Berikutnya</span>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-        </a>
-    </div>
-
-    <!-- Add Schedule Form -->
-    <div class="card">
-        <div class="card-header pb-3">
-            <h3 class="card-title text-lg">Tambah Jadwal</h3>
-            <p class="card-description">Klik tanggal di kalender atau isi manual di bawah ini</p>
+<div class="flex flex-col space-y-10 animate-in fade-in duration-1000">
+    <!-- Header Section -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-2 text-primary font-black text-[10px] uppercase tracking-[0.3em] mb-1">
+                <span class="w-8 h-[2px] bg-primary rounded-full"></span>
+                Operations Planning
+            </div>
+            <h2 class="text-4xl font-black tracking-tighter bg-gradient-to-r from-primary via-orange-400 to-primary bg-clip-text text-transparent">📅 Penjadwalan Manual</h2>
+            <p class="text-muted-foreground text-sm max-w-xl">Kelola penugasan personil secara presisi melalui antarmuka kalender digital terpadu.</p>
         </div>
-        <div class="card-content">
-            <form method="POST" action="{{ url_for('add_schedule') }}" id="addScheduleForm">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div class="space-y-2">
-                        <label for="user_id" class="text-sm font-medium leading-none">Pilih Member</label>
-                        <select id="user_id" name="user_id" required class="input">
-                            <option value="">-- Pilih Member --</option>
-                            {% for m in all_members %}
-                            <option value="{{ m.user_id }}">{{ m.username or m.telegram_username or m.user_id }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    
-                    <div class="space-y-2">
-                        <label for="tanggal" class="text-sm font-medium leading-none">Tanggal</label>
-                        <input type="date" id="tanggal" name="tanggal" required class="input">
-                    </div>
-                    
-                    <button type="submit" class="btn btn-primary w-full md:w-auto">
-                        Tambah Jadwal
-                    </button>
+    </div>
+
+    <!-- Month Navigation: Centered & Glass -->
+    <div class="flex justify-center">
+        <div class="flex items-center gap-8 bg-card/30 backdrop-blur-xl border border-primary/20 p-2 rounded-2xl shadow-2xl shadow-primary/5">
+            {% set prev_month = month - 1 if month > 1 else 12 %}
+            {% set prev_year = year if month > 1 else year - 1 %}
+            {% set next_month = month + 1 if month < 12 else 1 %}
+            {% set next_year = year if month < 12 else year + 1 %}
+            
+            <a href="{{ url_for('schedules', year=prev_year, month=prev_month) }}" 
+               class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all group">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="group-hover:-translate-x-1 transition-transform group-active:scale-90"><path d="m15 18-6-6 6-6"/></svg>
+            </a>
+            
+            <div class="flex flex-col items-center px-8">
+                <span class="text-2xl font-black tracking-tighter text-foreground">{{ month_name }}</span>
+                <span class="text-[10px] font-bold text-primary uppercase tracking-[0.4em]">{{ year }}</span>
+            </div>
+
+            <a href="{{ url_for('schedules', year=next_year, month=next_month) }}" 
+               class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all group">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="group-hover:translate-x-1 transition-transform group-active:scale-90"><path d="m9 18 6-6-6-6"/></svg>
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-4 gap-10 items-start">
+        <!-- Sidebar: Form & Stats -->
+        <div class="xl:col-span-1 space-y-8 sticky top-10">
+            <div class="card border-primary/20 overflow-hidden shadow-xl">
+                <div class="card-header bg-primary/5 p-6 space-y-1">
+                    <h3 class="text-sm font-black uppercase tracking-widest text-primary">Assign Member</h3>
+                    <p class="text-[10px] text-muted-foreground font-medium">Input penugasan manual ke sistem.</p>
                 </div>
-            </form>
-        </div>
-    </div>
+                <div class="card-content p-6 space-y-6">
+                    <form method="POST" action="{{ url_for('add_schedule') }}" id="addScheduleForm" class="space-y-6">
+                        <div class="space-y-2">
+                            <label class="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Personil Terdaftar</label>
+                            <select id="user_id" name="user_id" required class="input bg-muted/30 focus:bg-background transition-all">
+                                <option value="">-- Pilih Anggota --</option>
+                                {% for m in all_members %}
+                                <option value="{{ m.user_id }}">{{ m.username or m.telegram_username }} ({{ m.group_name }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="space-y-2">
+                            <label class="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Tanggal Terpilih</label>
+                            <div class="relative group">
+                                <input type="date" id="tanggal" name="tanggal" required 
+                                       class="input bg-muted/30 focus:bg-background transition-all text-center font-black tracking-tight cursor-pointer">
+                                <div class="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-primary opacity-50">📅</div>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-full py-6 rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-3">
+                            <span>Sematkan Jadwal</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                        </button>
+                    </form>
+                </div>
+            </div>
 
-    <!-- Calendar View -->
-    <div class="card overflow-hidden">
-        <div class="card-header border-b bg-muted/30">
-            <h3 class="card-title text-sm font-bold uppercase tracking-wider text-muted-foreground">Kalender {{ month_name }}</h3>
+            <!-- Enhanced Legend -->
+            <div class="card p-6 bg-card/20 backdrop-blur-sm border-dashed border-primary/20">
+                <h4 class="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-6">Indikator Kapasitas</h4>
+                <div class="grid grid-cols-1 gap-4">
+                    <div class="flex items-center justify-between group">
+                        <span class="text-[10px] font-bold text-muted-foreground tracking-tight">Slot Tersedia</span>
+                        <div class="w-3 h-3 rounded-full bg-primary/20 border border-primary/40 group-hover:scale-125 transition-transform"></div>
+                    </div>
+                    <div class="flex items-center justify-between group">
+                        <span class="text-[10px] font-bold text-muted-foreground tracking-tight">Kapasitas Penuh</span>
+                        <div class="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/40 group-hover:scale-125 transition-transform"></div>
+                    </div>
+                    <div class="flex items-center justify-between group opacity-40">
+                        <span class="text-[10px] font-bold text-muted-foreground tracking-tight">Luar Periode</span>
+                        <div class="w-3 h-3 rounded-full bg-muted border border-muted-foreground group-hover:scale-125 transition-transform"></div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="overflow-x-auto">
-            <table class="w-full border-collapse">
-                <thead>
-                    <tr class="bg-muted/50">
-                        {% for day_name in ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'] %}
-                            <th class="p-2 md:p-4 text-center text-xs font-bold text-muted-foreground border-b border-r last:border-r-0">
-                                {{ day_name }}
-                            </th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for week in month_calendar %}
-                    <tr>
-                        {% for day in week %}
-                            {% set date_str = '' %}
-                            {% set limit_info = {'limit': 1, 'current': 0, 'is_full': false} %}
-                            {% set is_full = false %}
-                            {% set can_click = false %}
+
+        <!-- Main Calendar: Modern Grid -->
+        <div class="xl:col-span-3 space-y-6">
+            <!-- Day Names Header -->
+            <div class="grid grid-cols-7 gap-4 mb-4">
+                {% for day_name in ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'] %}
+                    <div class="text-center py-2">
+                        <span class="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60">{{ day_name }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Calendar Grid -->
+            <div class="grid grid-cols-7 gap-4">
+                {% for week in month_calendar %}
+                    {% for day in week %}
+                        {% set date_str = '' %}
+                        {% set limit_info = {'limit': 1, 'current': 0, 'is_full': false} %}
+                        {% set is_full = false %}
+                        {% set can_click = false %}
+                        
+                        {% if day != 0 %}
+                            {% set date_str = '%04d-%02d-%02d'|format(year, month, day) %}
+                            {% set limit_info = daily_limits.get(date_str, {'limit': 1, 'current': 0, 'is_full': false}) %}
+                            {% set is_full = limit_info.is_full %}
+                            {% set can_click = not is_full %}
+                        {% endif %}
+
+                        <div class="calendar-tile relative group h-32 md:h-40 rounded-2xl transition-all duration-500 overflow-hidden border
+                            {% if day == 0 %} bg-muted/5 border-transparent opacity-20
+                            {% elif is_full %} bg-red-500/[0.03] border-red-500/10 grayscale-[0.5]
+                            {% else %} bg-card/40 backdrop-blur-xl border-primary/10 hover:border-primary/40 hover:scale-[1.02] hover:shadow-2xl hover:shadow-primary/10 cursor-pointer {% endif %}
+                            {% if day != 0 and can_click %} selectable-date {% endif %}"
+                            {% if day != 0 and can_click %} data-date="{{ date_str }}" onclick="selectDate(this)" {% endif %}>
                             
                             {% if day != 0 %}
-                                {% set date_str = '%04d-%02d-%02d'|format(year, month, day) %}
-                                {% set limit_info = daily_limits.get(date_str, {'limit': 1, 'current': 0, 'is_full': false}) %}
-                                {% set is_full = limit_info.is_full %}
-                                {% set can_click = not is_full %}
-                            {% endif %}
-                            
-                            <td class="h-24 md:h-32 p-1 md:p-2 border-b border-r last:border-r-0 align-top transition-colors 
-                                {% if day == 0 %}bg-muted/20{% else %}bg-background{% endif %} 
-                                {% if day != 0 and can_click %}hover:bg-accent/50 cursor-pointer group{% endif %}
-                                {% if day != 0 and is_full %}bg-red-50/30{% endif %}"
-                                {% if day != 0 and can_click %}data-date="{{ date_str }}" onclick="selectDate(this)"{% endif %}>
-                                
-                                {% if day != 0 %}
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="text-xs md:text-sm font-bold {% if is_full %}text-red-600{% else %}text-muted-foreground{% endif %}">
+                                <!-- Background Number -->
+                                <div class="absolute -right-2 -bottom-4 text-7xl font-black text-foreground/5 pointer-events-none group-hover:text-primary/10 transition-colors">
+                                    {{ day }}
+                                </div>
+
+                                <div class="relative p-4 h-full flex flex-col gap-3">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-xl font-black tracking-tighter text-foreground group-hover:text-primary transition-colors">
                                             {{ day }}
                                         </span>
-                                        <div class="flex gap-1">
-                                            {% if is_full %}
-                                                <span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
-                                            {% elif limit_info.current > 0 %}
-                                                <span class="text-[10px] font-bold text-orange-500">{{ limit_info.current }}/{{ limit_info.limit }}</span>
-                                            {% endif %}
-                                        </div>
+                                        
+                                        <!-- Capacity Pulse -->
+                                        {% if is_full %}
+                                            <span class="bg-red-500/10 text-red-500 text-[8px] font-black px-2 py-0.5 rounded-full border border-red-500/20">FULL</span>
+                                        {% elif limit_info.current > 0 %}
+                                            <div class="flex items-center gap-1.5 bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                                                <span class="w-1 h-1 rounded-full bg-primary animate-pulse"></span>
+                                                <span class="text-[9px] font-black text-primary">{{ limit_info.current }}/{{ limit_info.limit }}</span>
+                                            </div>
+                                        {% endif %}
                                     </div>
-                                    
-                                    <div class="space-y-1">
+
+                                    <!-- Member Chips Grid -->
+                                    <div class="flex-1 space-y-1.5 overflow-y-auto pr-1 custom-scrollbar scroll-smooth">
                                         {% if date_str in jadwal_per_tanggal %}
                                             {% for j in jadwal_per_tanggal[date_str] %}
-                                                <div class="group/chip flex items-center justify-between px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20 text-[9px] md:text font-medium truncate">
-                                                    <span class="truncate">{{ j.username or j.telegram_username }}</span>
-                                                    <form method="POST" action="{{ url_for('delete_schedule', jadwal_id=j.id) }}" class="inline-form opacity-0 group-hover/chip:opacity-100 transition-opacity">
-                                                        <button type="submit" class="text-red-500 hover:text-red-700 font-bold px-0.5" onclick="event.stopPropagation(); return confirm('Hapus jadwal ini?')">&times;</button>
+                                                <div class="flex items-center justify-between p-1.5 rounded-lg bg-card/80 border border-primary/5 text-[9px] font-black shadow-sm group/chip hover:border-primary/40 transition-all">
+                                                    <div class="flex items-center gap-1.5 truncate">
+                                                        <div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+                                                        <span class="truncate">{{ j.username or j.telegram_username }}</span>
+                                                    </div>
+                                                    <form method="POST" action="{{ url_for('delete_schedule', jadwal_id=j.id) }}" class="opacity-0 group-hover/chip:opacity-100 transition-opacity">
+                                                        <button type="submit" class="text-red-500 hover:scale-125 transition-transform" 
+                                                                onclick="event.stopPropagation(); return confirm('Hapus jadwal {{ j.username }}?')">
+                                                            ✕
+                                                        </button>
                                                     </form>
                                                 </div>
                                             {% endfor %}
                                         {% endif %}
                                     </div>
-                                {% endif %}
-                            </td>
-                        {% endfor %}
-                    </tr>
+                                </div>
+                            {% endif %}
+                        </div>
                     {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div class="flex flex-wrap gap-4 text-xs text-muted-foreground italic">
-        <div class="flex items-center gap-2">
-            <span class="w-3 h-3 rounded bg-primary/10 border border-primary/20"></span>
-            <span>Jadwal Terisi</span>
-        </div>
-        <div class="flex items-center gap-2">
-            <span class="w-3 h-3 rounded bg-red-50 border border-red-200"></span>
-            <span>Tanggal Penuh</span>
+                {% endfor %}
+            </div>
         </div>
     </div>
 </div>
 
+<style>
+.custom-scrollbar::-webkit-scrollbar { width: 3px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(var(--primary), 0.1); border-radius: 20px; }
+.calendar-tile.selected { border-color: rgb(var(--primary)); background: rgba(var(--primary), 0.05); box-shadow: 0 20px 40px -10px rgba(var(--primary), 0.2); transform: scale(0.98); }
+</style>
+
 <script>
 function selectDate(cell) {
-    if (cell.classList.contains('bg-red-50/30')) {
-        alert('Tanggal ini sudah penuh. Tidak bisa menambah jadwal.');
-        return;
-    }
+    // Reset all tiles
+    document.querySelectorAll('.calendar-tile').forEach(t => t.classList.remove('selected'));
     
-    // Remove previous selection
-    document.querySelectorAll('td.ring-2').forEach(c => c.classList.remove('ring-2', 'ring-primary', 'ring-inset'));
+    // Select this tile
+    cell.classList.add('selected');
     
-    // Add selection to clicked cell
-    cell.classList.add('ring-2', 'ring-primary', 'ring-inset');
-    
-    // Set the date input value
+    // Update Input
     const dateValue = cell.getAttribute('data-date');
-    document.getElementById('tanggal').value = dateValue;
+    const input = document.getElementById('tanggal');
+    input.value = dateValue;
     
-    // Smooth scroll to form
-    window.scrollTo({ top: document.getElementById('addScheduleForm').offsetTop - 100, behavior: 'smooth' });
+    // feedback animation on input
+    input.classList.add('ring-4', 'ring-primary/30');
+    setTimeout(() => input.classList.remove('ring-4', 'ring-primary/30'), 500);
 }
 </script>
 {% endblock %}

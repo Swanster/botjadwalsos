@@ -2,69 +2,92 @@
 {% block title %}Batasan Harian{% endblock %}
 
 {% block content %}
-<div class="flex flex-col space-y-6">
-    <div class="flex flex-col gap-1">
-        <h2 class="text-3xl font-bold tracking-tight">Batasan Assignment Harian</h2>
-        <p class="text-muted-foreground">Atur batasan jumlah orang standby untuk tanggal tertentu</p>
+<div class="flex flex-col space-y-8 animate-in fade-in duration-700">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex flex-col gap-1">
+            <h2 class="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent">⚖️ Batasan Assignment</h2>
+            <p class="text-muted-foreground">Kendalikan kepadatan operasional dengan membatasi jumlah personil standby per hari.</p>
+        </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Forms Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Single Date Limit Form -->
-        <div class="card">
-            <div class="card-header pb-3">
-                <h3 class="card-title text-lg">Tambah/Edit Batasan Harian</h3>
+        <div class="card group hover:shadow-lg transition-all duration-300 border-primary/20">
+            <div class="card-header bg-primary/5 pb-4">
+                <h3 class="card-title text-sm font-bold flex items-center gap-2">
+                    <span class="text-primary">📍</span>
+                    Atur Batasan Tanggal Spesifik
+                </h3>
             </div>
-            <div class="card-content">
+            <div class="card-content p-6">
                 <form method="POST">
-                    <div class="space-y-4">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="space-y-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div class="space-y-2">
-                                <label for="tanggal" class="text-sm font-medium">Tanggal</label>
-                                <input type="date" id="tanggal" name="tanggal" required class="input">
+                                <label for="tanggal" class="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Pilih Tanggal</label>
+                                <input type="date" id="tanggal" name="tanggal" required class="input focus:ring-primary/40 font-bold uppercase text-center">
                             </div>
                             <div class="space-y-2">
-                                <label for="max_assignments" class="text-sm font-medium">Maksimal Orang/Hari</label>
-                                <input type="number" id="max_assignments" name="max_assignments" min="1" max="10" value="1" required class="input">
+                                <label for="max_assignments" class="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Kapasitas Maksimal</label>
+                                <div class="relative">
+                                    <input type="number" id="max_assignments" name="max_assignments" min="1" max="10" value="1" required class="input focus:ring-primary/40 text-center font-bold text-lg">
+                                    <span class="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground uppercase">Orang</span>
+                                </div>
                             </div>
                         </div>
-                        <p class="text-[10px] text-muted-foreground italic">Batas maksimal orang yang boleh standby di tanggal ini</p>
-                        <button type="submit" class="btn btn-primary w-full">Simpan Batasan</button>
+                        <div class="p-3 rounded-lg bg-primary/5 border border-primary/10 flex items-start gap-2">
+                            <span class="text-xs">💡</span>
+                            <p class="text-[10px] text-muted-foreground leading-relaxed">Pengaturan ini akan menimpa kuota default untuk tanggal yang dipilih secara permanen hingga dihapus.</p>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-full shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group">
+                            <span>Terapkan Batasan</span>
+                            <span class="group-hover:scale-125 transition-transform">✅</span>
+                        </button>
                     </div>
                 </form>
             </div>
         </div>
 
         <!-- Bulk Monthly Setting Form -->
-        <div class="card">
-            <div class="card-header pb-3">
-                <h3 class="card-title text-lg">Pengaturan Bulanan Massal</h3>
+        <div class="card group hover:shadow-lg transition-all duration-300 border-orange-400/20">
+            <div class="card-header bg-orange-400/5 pb-4">
+                <h3 class="card-title text-sm font-bold flex items-center gap-2">
+                    <span class="text-orange-500">⚡</span>
+                    Konfigurasi Massal Bulanan
+                </h3>
             </div>
-            <div class="card-content">
+            <div class="card-content p-6">
                 <form method="POST">
                     <input type="hidden" name="bulk_set" value="true">
-                    <div class="space-y-4">
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="space-y-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
                             <div class="space-y-2">
-                                <label for="bulan" class="text-sm font-medium">Bulan</label>
-                                <select id="bulan" name="bulan" required class="input">
-                                    <option value="">Pilih Bulan</option>
+                                <label for="bulan" class="text-[10px] font-bold uppercase text-muted-foreground tracking-widest text-center block">Bulan</label>
+                                <select id="bulan" name="bulan" required class="input focus:ring-orange-400/40 appearance-none bg-background text-center font-bold">
+                                    <option value="">--</option>
                                     {% for i in range(1, 13) %}
                                     <option value="{{ i }}">{{ i }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
                             <div class="space-y-2">
-                                <label for="tahun" class="text-sm font-medium">Tahun</label>
-                                <input type="number" id="tahun" name="tahun" min="2024" max="2030" value="{{ current_year or 2026 }}" required class="input">
+                                <label for="tahun" class="text-[10px] font-bold uppercase text-muted-foreground tracking-widest text-center block">Tahun</label>
+                                <input type="number" id="tahun" name="tahun" min="2024" max="2030" value="{{ current_year or 2026 }}" required class="input focus:ring-orange-400/40 text-center font-bold">
                             </div>
                             <div class="space-y-2">
-                                <label for="max_assignments_bulan" class="text-sm font-medium">Maksimal</label>
-                                <input type="number" id="max_assignments_bulan" name="max_assignments_bulan" min="1" max="10" value="1" required class="input">
+                                <label for="max_assignments_bulan" class="text-[10px] font-bold uppercase text-muted-foreground tracking-widest text-center block">Satu Kapasitas</label>
+                                <input type="number" id="max_assignments_bulan" name="max_assignments_bulan" min="1" max="10" value="1" required class="input focus:ring-orange-400/40 text-center font-bold">
                             </div>
                         </div>
-                        <p class="text-[10px] text-muted-foreground italic">Setel batasan yang sama untuk semua tanggal dalam satu bulan</p>
-                        <button type="submit" class="btn btn-secondary w-full" onclick="return confirm('Atur batasan ini untuk seluruh bulan? Ini akan menimpa pengaturan yang ada.')">
-                            Setel untuk Seluruh Bulan
+                        <div class="p-3 rounded-lg bg-orange-400/5 border border-orange-400/10 flex items-start gap-2">
+                            <span class="text-xs">⚠️</span>
+                            <p class="text-[10px] text-muted-foreground leading-relaxed">Ini akan mengisi <span class="font-bold">seluruh tanggal</span> pada bulan tersebut dengan kapasitas yang sama. Gunakan dengan bijak.</p>
+                        </div>
+                        <button type="submit" class="btn btn-secondary w-full border-orange-400/30 hover:bg-orange-400/10 hover:text-orange-600 transition-all shadow-sm flex items-center justify-center gap-2 group" onclick="return confirm('Atur batasan ini untuk seluruh bulan? Ini akan menimpa pengaturan yang ada.')">
+                            <span>Sempurnakan Seluruh Bulan</span>
+                            <span class="group-hover:translate-x-1 transition-transform">📅</span>
                         </button>
                     </div>
                 </form>
@@ -72,37 +95,43 @@
         </div>
     </div>
 
-    <!-- Current Limits Table -->
-    <div class="card">
-        <div class="card-header border-b bg-muted/30">
-            <h3 class="card-title text-base font-bold uppercase tracking-wider">Batasan Harian Saat Ini</h3>
+    <!-- Current Limits List -->
+    <div class="card overflow-hidden border-primary/20">
+        <div class="card-header bg-muted/20 p-4 flex flex-row items-center justify-between">
+            <h3 class="text-sm font-bold uppercase tracking-widest text-muted-foreground">Daftar Batasan Aktif</h3>
+            <span class="text-[10px] font-bold bg-primary/10 text-primary px-3 py-1 rounded-full uppercase tracking-tighter">{{ limits|length }} Overrides</span>
         </div>
         <div class="card-content p-0 overflow-x-auto">
             {% if limits %}
-                <table class="w-full text-sm">
+                <table class="w-full text-xs">
                     <thead>
-                        <tr class="border-b bg-muted/50 transition-colors">
-                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground font-bold">Tanggal</th>
-                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground font-bold">Batas Maksimal</th>
-                            <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground font-bold hidden sm:table-cell">Dibuat Pada</th>
-                            <th class="h-10 px-4 text-right align-middle font-medium text-muted-foreground font-bold">Aksi</th>
+                        <tr class="bg-card/50 text-muted-foreground">
+                            <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b">Tanggal</th>
+                            <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b">Ambang Batas</th>
+                            <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b hidden sm:table-cell">Timestamp Data</th>
+                            <th class="h-12 px-6 text-right font-bold uppercase tracking-widest border-b">Aksi</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y">
+                    <tbody class="divide-y divide-primary/5">
                         {% for limit in limits %}
-                        <tr class="hover:bg-muted/50 transition-colors">
-                            <td class="p-4 align-middle font-bold">{{ limit.tanggal }}</td>
-                            <td class="p-4 align-middle">
-                                <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
-                                    {{ limit.max_assignments }} orang
+                        <tr class="hover:bg-muted/30 transition-colors group">
+                            <td class="p-6 align-middle">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2 h-2 rounded-full bg-primary shadow-sm shadow-primary/40 animate-pulse"></div>
+                                    <span class="font-black text-foreground tracking-tight">{{ limit.tanggal }}</span>
+                                </div>
+                            </td>
+                            <td class="p-6 align-middle">
+                                <span class="bg-primary/10 text-primary text-[10px] font-black px-3 py-1.5 rounded-lg border border-primary/20 shadow-sm uppercase tracking-tighter">
+                                    {{ limit.max_assignments }} PERSONIL / HARI
                                 </span>
                             </td>
-                            <td class="p-4 align-middle text-muted-foreground text-xs hidden sm:table-cell">{{ limit.created_at[:16] }}</td>
-                            <td class="p-4 align-middle text-right">
+                            <td class="p-6 align-middle text-muted-foreground font-mono text-[9px] hidden sm:table-cell">{{ limit.created_at[:16] }}</td>
+                            <td class="p-6 align-middle text-right">
                                 <form method="POST" action="{{ url_for('delete_daily_limit_route', tanggal=limit.tanggal) }}" 
                                       onsubmit="return confirm('Hapus batasan untuk {{ limit.tanggal }}?')">
-                                    <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:text-red-600">
-                                        <span>🗑️</span>
+                                    <button type="submit" class="btn btn-ghost h-9 w-9 p-0 text-red-400 hover:text-red-500 hover:bg-red-50 transition-all rounded-xl opacity-0 group-hover:opacity-100">
+                                        <span class="text-lg">🗑️</span>
                                     </button>
                                 </form>
                             </td>
@@ -111,23 +140,26 @@
                     </tbody>
                 </table>
             {% else %}
-                <div class="flex flex-col items-center justify-center py-12 text-center space-y-3">
-                    <span class="text-4xl">⚖️</span>
+                <div class="flex flex-col items-center justify-center py-20 text-center space-y-6 grayscale opacity-40">
+                    <div class="w-24 h-24 rounded-full bg-muted flex items-center justify-center text-5xl">🏛️</div>
                     <div class="space-y-1">
-                        <p class="font-bold">Belum ada batasan harian yang diatur</p>
-                        <p class="text-sm text-muted-foreground">Tambah batasan untuk tanggal tertentu menggunakan formulir di atas.</p>
+                        <p class="font-black text-lg tracking-tighter">Sistem Masih Kondusif</p>
+                        <p class="text-xs text-muted-foreground italic">Belum ada batasan harian yang diatur secara manual.</p>
                     </div>
                 </div>
             {% endif %}
         </div>
     </div>
 
-    <!-- Info Banner -->
-    <div class="p-4 rounded-lg border border-primary/20 bg-primary/5 text-foreground flex gap-3">
-        <span class="text-xl text-primary">ℹ️</span>
-        <div class="text-sm space-y-1">
-            <p class="font-bold text-primary">Informasi Penting</p>
-            <p class="text-muted-foreground">Jika tidak ada batasan yang diatur untuk suatu tanggal, sistem akan menggunakan default <strong class="text-foreground">1 orang per hari</strong>. Batasan harian memiliki prioritas lebih tinggi daripada kuota grup.</p>
+    <!-- Premium Info Banner -->
+    <div class="p-6 rounded-md border border-blue-500/30 bg-blue-50/10 text-blue-400 flex items-start gap-5 relative overflow-hidden group">
+        <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 text-xl shadow-lg shadow-blue-500/20">🛡️</div>
+        <div class="flex-1 space-y-2 relative z-10">
+            <h4 class="font-extrabold text-sm text-blue-500 uppercase tracking-widest">Informasi Arsitektur</h4>
+            <p class="text-xs text-muted-foreground leading-relaxed font-medium">
+                Sistem menggunakan kebijakan <span class="text-foreground font-bold italic">Default First</span>. Jika tidak ada baris di atas, limit global <span class="bg-primary/10 text-primary px-1 rounded font-bold">1 Orang/Hari</span> berlaku otomatis. <br>
+                <span class="text-foreground font-bold">Catatan:</span> Batas harian ini mengikat <span class="underline decoration-blue-500/30 decoration-2 underline-offset-4">semua divisi</span> tanpa terkecuali.
+            </p>
         </div>
     </div>
 </div>

@@ -2,60 +2,112 @@
 {% block title %}Logs Aktivitas{% endblock %}
 
 {% block content %}
-<div class="mb-8 flex flex-col gap-2">
-    <h1 class="text-3xl font-bold tracking-tight">📜 Logs Aktivitas</h1>
-    <p class="text-muted-foreground">Mencatat aktivitas perubahan jadwal manual dan login admin.</p>
-</div>
-
-<div class="card overflow-hidden">
-    <div class="card-header border-b bg-muted/30">
-        <h3 class="card-title text-base font-bold uppercase tracking-wider">Riwayat Aktivitas Terbaru</h3>
+<div class="flex flex-col space-y-8 animate-in fade-in duration-700">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex flex-col gap-1">
+            <h2 class="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent">📜 Log Audit Sistem</h2>
+            <p class="text-muted-foreground">Arsip komprehensif untuk setiap interaksi, perubahan jadwal, dan sesi administratif.</p>
+        </div>
     </div>
-    <div class="card-content p-0 overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead>
-                <tr class="border-b bg-muted/50 transition-colors">
-                    <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground w-[180px]">Waktu</th>
-                    <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground w-[120px]">User</th>
-                    <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground w-[150px]">Aksi</th>
-                    <th class="h-10 px-4 text-left align-middle font-medium text-muted-foreground">Deskripsi</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y text-xs sm:text-sm">
-                {% if logs %}
-                    {% for log in logs %}
-                    <tr class="hover:bg-muted/50 transition-colors">
-                        <td class="p-4 align-middle whitespace-nowrap text-muted-foreground">
-                            {{ log.timestamp }}
-                        </td>
-                        <td class="p-4 align-middle">
-                            <span class="font-medium text-primary">{{ log.username }}</span>
-                        </td>
-                        <td class="p-4 align-middle">
-                            {% if log.action == 'LOGIN' %}
-                                <span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold text-[10px]">LOGIN</span>
-                            {% elif log.action == 'ADD_SCHEDULE' %}
-                                <span class="px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-bold text-[10px]">TAMBAH JADWAL</span>
-                            {% elif log.action == 'DELETE_SCHEDULE' %}
-                                <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-bold text-[10px]">HAPUS JADWAL</span>
-                            {% else %}
-                                <span class="px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-bold text-[10px]">{{ log.action }}</span>
-                            {% endif %}
-                        </td>
-                        <td class="p-4 align-middle">
-                            {{ log.description }}
-                        </td>
+
+    <!-- Main Log Card -->
+    <div class="card group hover:shadow-lg transition-all duration-300 border-primary/20 overflow-hidden">
+        <div class="card-header bg-muted/20 p-4 flex flex-row items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                Input Aktivitas Real-time
+            </h3>
+            <div class="text-[10px] font-bold text-muted-foreground bg-accent/50 px-2 py-1 rounded border">AUTO-SYNC ON</div>
+        </div>
+        <div class="card-content p-0 overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="bg-card/50 text-muted-foreground">
+                        <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b whitespace-nowrap">Waktu & Tanggal</th>
+                        <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b">Operator</th>
+                        <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b">Jenis Aktivitas</th>
+                        <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b">Detail Deskripsi</th>
                     </tr>
-                    {% endfor %}
-                {% else %}
-                    <tr>
-                        <td colspan="4" class="p-8 text-center text-muted-foreground italic">
-                            Belum ada aktivitas yang tercatat.
-                        </td>
-                    </tr>
-                {% endif %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody class="divide-y divide-primary/5">
+                    {% if logs %}
+                        {% for log in logs %}
+                        <tr class="hover:bg-muted/30 transition-colors group">
+                            <td class="p-6 align-middle whitespace-nowrap">
+                                <div class="flex flex-col">
+                                    <span class="font-black text-foreground antialiased tracking-tighter">{{ log.timestamp[:19] }}</span>
+                                    <span class="text-[9px] text-muted-foreground uppercase font-bold">WIB / GMT+7</span>
+                                </div>
+                            </td>
+                            <td class="p-6 align-middle">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-[10px] font-black text-primary border border-primary/20">
+                                        {{ log.username[0]|upper }}
+                                    </div>
+                                    <span class="font-bold text-foreground">{{ log.username }}</span>
+                                </div>
+                            </td>
+                            <td class="p-6 align-middle">
+                                {% if log.action == 'LOGIN' %}
+                                    <span class="px-2.5 py-1.5 rounded-lg bg-blue-500/10 text-blue-600 border border-blue-500/20 font-black text-[9px] uppercase tracking-widest shadow-sm">
+                                        🔐 Sesi Login
+                                    </span>
+                                {% elif log.action == 'ADD_SCHEDULE' %}
+                                    <span class="px-2.5 py-1.5 rounded-lg bg-green-500/10 text-green-600 border border-green-500/20 font-black text-[9px] uppercase tracking-widest shadow-sm">
+                                        ➕ Tambah Jadwal
+                                    </span>
+                                {% elif log.action == 'DELETE_SCHEDULE' %}
+                                    <span class="px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-600 border border-red-500/20 font-black text-[9px] uppercase tracking-widest shadow-sm">
+                                        🗑️ Hapus Jadwal
+                                    </span>
+                                {% elif log.action == 'UPDATE_LIMIT' %}
+                                    <span class="px-2.5 py-1.5 rounded-lg bg-purple-500/10 text-purple-600 border border-purple-500/20 font-black text-[9px] uppercase tracking-widest shadow-sm">
+                                        ⚖️ Atur Batasan
+                                    </span>
+                                {% else %}
+                                    <span class="px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground border border-border font-black text-[9px] uppercase tracking-widest">
+                                        ⚡ {{ log.action }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="p-6 align-middle">
+                                <p class="text-muted-foreground font-medium max-w-md leading-relaxed group-hover:text-foreground transition-colors">
+                                    {{ log.description }}
+                                </p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="4" class="p-20 text-center">
+                                <div class="flex flex-col items-center gap-4 grayscale opacity-30">
+                                    <div class="text-6xl text-muted-foreground">🌑</div>
+                                    <div class="space-y-1">
+                                        <p class="font-black text-lg tracking-tighter">Sunyi Sekali...</p>
+                                        <p class="text-xs italic italic">Belum ada jejak aktivitas yang tercatat dalam arsip.</p>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Log Retention Info Banner -->
+    <div class="p-6 rounded-md border border-blue-500/30 bg-blue-50/10 text-blue-400 flex items-start gap-4">
+        <span class="text-xl">🛡️</span>
+        <div class="space-y-1">
+            <h4 class="text-xs font-black uppercase text-blue-500 tracking-widest leading-none">Kebijakan Retensi Log</h4>
+            <p class="text-[10px] text-muted-foreground leading-relaxed font-medium">
+                Data aktivitas disimpan untuk memastikan transparansi operasional. <br>
+                Admin dilarang menghapus log secara manual kecuali untuk pemeliharaan database tahunan.
+            </p>
+        </div>
     </div>
 </div>
 {% endblock %}
+
+
