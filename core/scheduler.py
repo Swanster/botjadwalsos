@@ -12,7 +12,7 @@ from core.database import (
     get_jadwal_for_specific_date, get_all_absensi_in_range, get_jadwal_by_group,
     get_all_users_in_group, format_tanggal_indonesia,
     get_all_registered_users, get_users_with_schedule_in_range,
-    is_date_full, get_daily_limit
+    is_date_full, get_daily_limit, get_assignment_count_for_date
 )
 
 # Decorator retry_on_failure (TETAP SAMA)
@@ -336,53 +336,44 @@ def kirim_peringatan_jadwal_mingguan_kosong(bot):
 def kirim_peringatan_h_minus_3(bot):
     """
     Setiap hari, mengecek jadwal untuk 3 hari ke depan (H-3).
-    Jika slot belum penuh, kirim peringatan.
+    Jika slot belum penuh, kirim peringatan dengan mention semua anggota.
     """
     print("Scheduler: Mengecek slot kosong untuk H-3...")
     tz = pytz.timezone("Asia/Makassar")
-    
+
     # Tentukan tanggal target (3 hari dari sekarang)
     target_date = (datetime.now(tz) + timedelta(days=3)).date()
     target_date_str = target_date.strftime('%Y-%m-%d')
 
-    # Dapatkan jadwal yang sudah terisi pada hari H-3
-    jadwal_infra = get_jadwal_by_group(target_date.year, target_date.month, 'INFRA')
-    jadwal_ce = get_jadwal_by_group(target_date.year, target_date.month, 'CE')
-    jadwal_apps = get_jadwal_by_group(target_date.year, target_date.month, 'APPS')
-    jadwal_monitoring = get_jadwal_by_group(target_date.year, target_date.month, 'MONITORING')
-    
-    # Hitung jumlah terisi khusus untuk tanggal target
-    terisi_infra = sum(1 for j in jadwal_infra if j['tanggal'] == target_date_str)
-    terisi_ce = sum(1 for j in jadwal_ce if j['tanggal'] == target_date_str)
-    terisi_apps = sum(1 for j in jadwal_apps if j['tanggal'] == target_date_str)
-    terisi_monitoring = sum(1 for j in jadwal_monitoring if j['tanggal'] == target_date_str)
+    # Cek total yang sudah terisi dan batas harian
+    total_terisi = get_assignment_count_for_date(target_date_str)
+    max_per_hari = get_daily_limit(target_date_str, 1)
 
-    # Cek batasan harian
-    max_per_hari_infra = get_daily_limit(target_date_str, 2)
-    max_per_hari_ce = get_daily_limit(target_date_str, 1)
-    max_per_hari_apps = get_daily_limit(target_date_str, 1)
-    max_per_hari_monitoring = get_daily_limit(target_date_str, 1)
-
-    pesan_peringatan = ""
-    if terisi_infra < max_per_hari_infra:
-        pesan_peringatan += f"• 🚨 Slot *INFRA* masih kurang ({terisi_infra}/{max_per_hari_infra} terisi).\n"
-    if terisi_ce < max_per_hari_ce:
-        pesan_peringatan += f"• 🚨 Slot *CE* masih kurang ({terisi_ce}/{max_per_hari_ce} terisi).\n"
-    if terisi_apps < max_per_hari_apps:
-        pesan_peringatan += f"• 🚨 Slot *APPS* masih kurang ({terisi_apps}/{max_per_hari_apps} terisi).\n"
-    if terisi_monitoring < max_per_hari_monitoring:
-        pesan_peringatan += f"• 🚨 Slot *MONITORING* masih kurang ({terisi_monitoring}/{max_per_hari_monitoring} terisi).\n"
-        
-    if not pesan_peringatan:
-        print(f"Scheduler: Slot untuk H-3 ({target_date_str}) sudah penuh. Peringatan dilewati.")
+    # Jika sudah penuh, tidak perlu kirim peringatan
+    if total_terisi >= max_per_hari:
+        print(f"Scheduler: Slot untuk H-3 ({target_date_str}) sudah penuh ({total_terisi}/{max_per_hari}). Peringatan dilewati.")
         return
 
-    # Buat pesan akhir
+    # Hitung slot yang masih tersedia
+    slot_tersedia = max_per_hari - total_terisi
+
+    # Mention semua pengguna terdaftar
+    all_users = get_all_registered_users()
+    mentions = []
+    for user in all_users:
+        if user['telegram_username']:
+            mentions.append(f"@{user['telegram_username']}")
+        else:
+            mentions.append(f"[pengguna](tg://user?id={user['user_id']})")
+
+    mention_block = " ".join(mentions)
+
     pesan = (f"📢 *Peringatan Jadwal H-3*\n\n"
-             f"Jadwal standby untuk hari *{format_tanggal_indonesia(target_date)}* masih belum penuh:\n\n"
-             f"{pesan_peringatan}\n"
-             f"Mohon anggota yang bersangkutan untuk segera mengisi kekosongan melalui perintah `/start` atau melakukan pertukaran jadwal.")
-             
+             f"Jadwal standby untuk *{format_tanggal_indonesia(target_date)}* masih tersedia **{slot_tersedia} slot** lagi.\n\n"
+             f"📊 Status: Terisi {total_terisi} dari {max_per_hari} slot\n\n"
+             f"CC: {mention_block}\n\n"
+             f"Mohon segera mengisi kekosongan melalui perintah `/start` atau melakukan pertukaran jadwal.")
+
     bot.send_message(
         chat_id=GROUP_CHAT_ID,
         text=pesan,

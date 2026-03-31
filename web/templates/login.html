@@ -68,7 +68,7 @@
                 --primary: 21.7 65.6% 55.5%;
                 --primary-foreground: 0 0% 100%;
                 --secondary: 180 17.6% 39%;
-                --secondary-foreground: 0 0% 100%;
+                --secondary-foreground: 0 0% 98%;
                 --muted: 220 14.3% 95.9%;
                 --muted-foreground: 220 8.9% 46.1%;
                 --accent: 0 0% 93.3%;
@@ -104,60 +104,184 @@
             }
             body { @apply font-sans bg-background text-foreground antialiased; }
         }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%);
+        }
+        
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4">
-    <div class="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <div class="flex flex-col items-center text-center space-y-2">
-            <div class="h-12 w-12 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-2xl font-bold heading-font shadow-lg">V</div>
-            <h1 class="text-3xl font-extrabold tracking-tight heading-font text-foreground">Bot Jadwal SOS</h1>
-            <p class="text-muted-foreground font-medium">Masuk untuk mengelola jadwal standby</p>
+<body class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+    <!-- Background Decorations -->
+    <div class="absolute top-0 left-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
+    <div class="absolute bottom-0 right-0 w-96 h-96 bg-secondary/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2"></div>
+    
+    <div class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-8 items-center relative z-10">
+        
+        <!-- Left: Landing Content -->
+        <div class="hidden lg:flex flex-col space-y-8 animate-in fade-in slide-in-from-left-8 duration-700">
+            <!-- Logo & Title -->
+            <div class="flex items-center gap-4">
+                <div class="h-16 w-16 rounded-2xl gradient-bg flex items-center justify-center text-white text-3xl font-bold heading-font shadow-2xl shadow-primary/30">
+                    V
+                </div>
+                <div>
+                    <h1 class="text-4xl font-extrabold tracking-tight heading-font text-foreground">VARNION SOS</h1>
+                    <p class="text-sm text-muted-foreground font-medium">Standby Operational System</p>
+                </div>
+            </div>
+
+            <!-- Hero Section -->
+            <div class="space-y-4">
+                <h2 class="text-5xl font-black heading-font leading-tight">
+                    Kelola Jadwal
+                    <span class="bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent">Standby</span>
+                    <br/>Lebih Mudah
+                </h2>
+                <p class="text-lg text-muted-foreground leading-relaxed max-w-lg">
+                    Sistem manajemen jadwal standby otomatis untuk tim operasional. 
+                    Terintegrasi dengan Telegram dan Google Sheets untuk efisiensi maksimal.
+                </p>
+            </div>
+
+            <!-- Features Grid -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="p-4 rounded-xl border bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-all group">
+                    <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform">🤖</div>
+                    <h3 class="font-bold text-sm mb-1">Telegram Bot</h3>
+                    <p class="text-xs text-muted-foreground">Input jadwal langsung dari Telegram dengan mudah</p>
+                </div>
+
+                <div class="p-4 rounded-xl border bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-all group">
+                    <div class="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform">📊</div>
+                    <h3 class="font-bold text-sm mb-1">Google Sheets</h3>
+                    <p class="text-xs text-muted-foreground">Auto-sync data ke spreadsheet untuk backup</p>
+                </div>
+
+                <div class="p-4 rounded-xl border bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-all group">
+                    <div class="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform">⚖️</div>
+                    <h3 class="font-bold text-sm mb-1">Kuota Fleksibel</h3>
+                    <p class="text-xs text-muted-foreground">Atur batasan harian dan bulanan per divisi</p>
+                </div>
+
+                <div class="p-4 rounded-xl border bg-card/50 backdrop-blur-sm hover:border-primary/30 transition-all group">
+                    <div class="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-xl mb-3 group-hover:scale-110 transition-transform">🔄</div>
+                    <h3 class="font-bold text-sm mb-1">Auto Reminder</h3>
+                    <p class="text-xs text-muted-foreground">Pengingat otomatis via Telegram setiap hari</p>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="flex items-center gap-6 p-4 rounded-xl border bg-gradient-to-r from-primary/5 to-secondary/5">
+                <div class="text-center">
+                    <p class="text-2xl font-bold heading-font text-primary">4</p>
+                    <p class="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Divisi</p>
+                </div>
+                <div class="w-px h-10 bg-border"></div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold heading-font text-primary">31</p>
+                    <p class="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Hari/Bulan</p>
+                </div>
+                <div class="w-px h-10 bg-border"></div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold heading-font text-primary">24/7</p>
+                    <p class="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">Monitoring</p>
+                </div>
+            </div>
         </div>
 
-        <div class="bg-card rounded-xl border shadow-xl overflow-hidden">
-            <div class="p-8">
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                        {% for category, message in messages %}
-                            <div class="mb-6 p-4 rounded-lg flex items-center gap-3 animate-in slide-in-from-top-2 
-                                {% if category == 'error' %}bg-destructive/10 text-destructive border border-destructive/20{% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">
-                                <span class="text-lg">{% if category == 'error' %}⚠️{% else %}✅{% endif %}</span>
-                                <p class="text-sm font-medium">{{ message }}</p>
+        <!-- Right: Login Form -->
+        <div class="animate-in fade-in slide-in-from-right-8 duration-700">
+            <div class="bg-card rounded-2xl border shadow-2xl overflow-hidden">
+                <!-- Form Header -->
+                <div class="gradient-bg p-6 text-white text-center">
+                    <div class="h-14 w-14 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl font-bold heading-font mx-auto mb-3 animate-float">
+                        🔐
+                    </div>
+                    <h2 class="text-2xl font-bold heading-font">Selamat Datang</h2>
+                    <p class="text-sm text-white/80 mt-1">Masuk untuk mengelola jadwal</p>
+                </div>
+
+                <!-- Form Body -->
+                <div class="p-8">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="mb-6 p-4 rounded-lg flex items-center gap-3 animate-in slide-in-from-top-2
+                                    {% if category == 'error' %}bg-destructive/10 text-destructive border border-destructive/20{% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">
+                                    <span class="text-lg">{% if category == 'error' %}⚠️{% else %}✅{% endif %}</span>
+                                    <p class="text-sm font-medium">{{ message }}</p>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST" class="space-y-6">
+                        <div class="space-y-2">
+                            <label for="username" class="text-sm font-medium leading-none">Username</label>
+                            <div class="relative">
+                                <div class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-lg">👤</div>
+                                <input type="text" id="username" name="username" required autofocus
+                                       class="flex h-11 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-all duration-200"
+                                       placeholder="Masukkan username">
                             </div>
-                        {% endfor %}
-                    {% endif %}
-                {% endwith %}
-
-                <form method="POST" class="space-y-6">
-                    <div class="space-y-2">
-                        <label for="username" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Username</label>
-                        <input type="text" id="username" name="username" required autofocus 
-                               class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200" 
-                               placeholder="Masukkan username">
-                    </div>
-                    
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <label for="password" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Password</label>
                         </div>
-                        <input type="password" id="password" name="password" required 
-                               class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200" 
-                               placeholder="••••••••">
-                    </div>
-                    
-                    <button type="submit" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8 w-full shadow-md active:scale-[0.98]">
-                        Masuk ke Dashboard
-                    </button>
-                </form>
-            </div>
-            
-            <div class="bg-muted/50 p-4 border-t text-center">
-                <p class="text-[10px] text-muted-foreground font-bold tracking-widest uppercase">&copy; 2026 VARNION INFRA TIM</p>
-            </div>
-        </div>
 
-        <div class="text-center">
-            <p class="text-xs text-muted-foreground">Butuh bantuan akses? Hubungi Admin Utama.</p>
+                        <div class="space-y-2">
+                            <label for="password" class="text-sm font-medium leading-none">Password</label>
+                            <div class="relative">
+                                <div class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-lg">🔑</div>
+                                <input type="password" id="password" name="password" required
+                                       class="flex h-11 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 transition-all duration-200"
+                                       placeholder="••••••••">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 gradient-bg text-white hover:opacity-90 h-12 px-8 w-full shadow-lg hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] font-bold">
+                            <span>🚀</span>
+                            <span class="ml-2">Masuk ke Dashboard</span>
+                        </button>
+                    </form>
+
+                    <!-- Help Text -->
+                    <div class="mt-6 p-4 rounded-lg bg-muted/30 border border-border/50">
+                        <p class="text-xs text-muted-foreground text-center">
+                            <span class="font-bold">💡 Butuh bantuan?</span> Hubungi Admin Utama untuk akses.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Form Footer -->
+                <div class="bg-muted/50 p-4 border-t text-center">
+                    <p class="text-[10px] text-muted-foreground font-bold tracking-widest uppercase">
+                        &copy; 2026 VARNION INFRA TIM
+                    </p>
+                </div>
+            </div>
+
+            <!-- Mobile Features (Visible only on small screens) -->
+            <div class="lg:hidden mt-6 grid grid-cols-3 gap-3">
+                <div class="p-3 rounded-lg border bg-card/50 text-center">
+                    <div class="text-2xl mb-1">🤖</div>
+                    <p class="text-[10px] font-bold text-muted-foreground uppercase">Telegram Bot</p>
+                </div>
+                <div class="p-3 rounded-lg border bg-card/50 text-center">
+                    <div class="text-2xl mb-1">📊</div>
+                    <p class="text-[10px] font-bold text-muted-foreground uppercase">Google Sheets</p>
+                </div>
+                <div class="p-3 rounded-lg border bg-card/50 text-center">
+                    <div class="text-2xl mb-1">⚖️</div>
+                    <p class="text-[10px] font-bold text-muted-foreground uppercase">Auto Sync</p>
+                </div>
+            </div>
         </div>
     </div>
 </body>

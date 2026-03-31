@@ -155,11 +155,12 @@
                     ('members', '👥', 'Member'),
                     ('daily_limits', '⚖️', 'Batasan Harian'),
                     ('settings', '⚙️', 'Settings Kuota'),
+                    ('google_sheets', '📝', 'Google Sheets'),
                     ('admins', '🔐', 'Admin User'),
                     ('logs', '📜', 'Logs Aktivitas'),
                     ('change_password', '🔑', 'Ganti Password')
                 ] %}
-                
+
                 {% for endpoint, icon, label in menu_items %}
                 <a href="{{ url_for(endpoint) }}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.endpoint == endpoint %}bg-primary text-primary-foreground shadow-xl shadow-primary/20 scale-[1.02]{% else %}text-muted-foreground hover:bg-muted hover:text-foreground hover:translate-x-1{% endif %}">
                     <span class="text-lg opacity-80 group-hover:scale-125 transition-transform">{{ icon }}</span>

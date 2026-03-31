@@ -20,6 +20,7 @@ from core.database import (
     delete_user_jadwal_on_dates, get_setting,
     is_date_full, get_daily_limit
 )
+from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets
 
 # Variabel global
 user_selections, user_cuti_selections = {}, {}
@@ -32,7 +33,13 @@ EMOJI_HARI = {'Senin':'🌞','Selasa':'📘','Rab':'📗','Kamis':'📙','Jumat'
 def is_allowed(message):
     if message.chat.type == 'private': return True
     if ALLOWED_TOPIC_ID and message.chat.type in ['group', 'supergroup']: return message.message_thread_id == ALLOWED_TOPIC_ID
-    return True
+    return False
+
+def get_hari_from_date(date_str: str) -> str:
+    """Dapatkan nama hari dari string tanggal YYYY-MM-DD."""
+    from datetime import datetime
+    date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+    return HARI_MAP_ID[date_obj.weekday()]
 
 # --- LOGIKA ATURAN WEEKEND (DARI KODE ANDA) ---
 def get_pasangan_weekend(cek_tanggal: date) -> Optional[date]:
@@ -461,9 +468,29 @@ def register_user_handlers(bot: telebot.TeleBot):
                 if mode == 'jadwal':
                     update_user_jadwal_for_month(user_id, call.from_user.first_name, call.from_user.username, pilihan_final, year, month)
                     pesan = f"✅ Jadwal Anda untuk bulan {NAMA_BULAN[month]} {year} telah disimpan."
+                    
+                    # Sync ke Google Sheets untuk setiap tanggal yang dipilih
+                    user_group = get_user_group(user_id)
+                    for tanggal in pilihan_final:
+                        hari = get_hari_from_date(tanggal)
+                        sync_jadwal_to_sheets(
+                            tanggal=tanggal,
+                            hari=hari,
+                            username=call.from_user.username or call.from_user.first_name,
+                            user_id=user_id,
+                            group=user_group or 'UNKNOWN'
+                        )
                 else: # cuti
                     set_user_absensi(user_id, pilihan_final, year, month) # Modifikasi kecil agar lebih aman
                     pesan = f"✅ Data cuti Anda untuk bulan {NAMA_BULAN[month]} {year} telah diperbarui."
+                    
+                    # Sync ke Google Sheets untuk setiap tanggal cuti
+                    for tanggal in pilihan_final:
+                        sync_absensi_to_sheets(
+                            tanggal=tanggal,
+                            username=call.from_user.username or call.from_user.first_name,
+                            user_id=user_id
+                        )
                 if user_id in selection_dict: del selection_dict[user_id]
                 try: bot.delete_message(call.message.chat.id, call.message.message_id)
                 except ApiTelegramException: pass

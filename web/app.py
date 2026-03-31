@@ -23,6 +23,7 @@ from core.database import (
     is_date_full, add_audit_log, get_audit_logs,
     get_all_settings, set_setting
 )
+from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets, get_google_sheets_client
 
 # =============================================================================
 # FLASK APP SETUP (Fixed - removed settings dependency, added daily limits validation)
@@ -291,6 +292,20 @@ def create_app():
             
             if add_jadwal_manual(user_id, username, telegram_username, tanggal):
                 add_audit_log(current_user.username, 'ADD_SCHEDULE', f'Menambah jadwal manual untuk {username} ({user_id}) pada tanggal {tanggal}')
+                
+                # Sync ke Google Sheets
+                user_group = get_user_group(user_id)
+                hari_map = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'Sabtu', 6: 'Minggu'}
+                from datetime import datetime
+                hari = hari_map[datetime.strptime(tanggal, '%Y-%m-%d').weekday()]
+                sync_jadwal_to_sheets(
+                    tanggal=tanggal,
+                    hari=hari,
+                    username=telegram_username or username,
+                    user_id=user_id,
+                    group=user_group or 'UNKNOWN'
+                )
+                
                 flash(f'Jadwal untuk {username} pada {tanggal} berhasil ditambahkan.', 'success')
             else:
                 flash('Gagal menambahkan jadwal.', 'error')
@@ -529,6 +544,89 @@ def create_app():
             flash(f'Terjadi error: {str(e)}', 'error')
         
         return redirect(url_for('daily_limits'))
+
+    # =============================================================================
+    # ROUTES - GOOGLE SHEETS SYNC
+    # =============================================================================
+
+    @app.route('/google-sheets')
+    @login_required
+    def google_sheets():
+        """Halaman status Google Sheets integration."""
+        client = get_google_sheets_client()
+        is_enabled = client.is_enabled()
+        sheet_url = client.get_sheet_url() if is_enabled else None
+        
+        return render_template('google_sheets.html', 
+                             is_enabled=is_enabled, 
+                             sheet_url=sheet_url)
+
+    @app.route('/google-sheets/sync-all', methods=['POST'])
+    @login_required
+    def sync_all_to_sheets():
+        """Full sync semua data jadwal dan absensi ke Google Sheets."""
+        try:
+            from core.database import get_all_absensi_in_range, get_jadwal_for_month
+            
+            client = get_google_sheets_client()
+            
+            if not client.is_enabled():
+                flash('Google Sheets sync belum aktif. Periksa konfigurasi.', 'error')
+                return redirect(url_for('google_sheets'))
+            
+            # Sync semua jadwal (ambil 3 bulan terakhir dan 3 bulan ke depan)
+            from datetime import datetime, timedelta
+            now = datetime.now()
+            hari_map = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'Sabtu', 6: 'Minggu'}
+            
+            all_jadwal = []
+            for month_offset in range(-3, 4):
+                target_month = now.month + month_offset
+                target_year = now.year
+                if target_month < 1:
+                    target_month += 12
+                    target_year -= 1
+                elif target_month > 12:
+                    target_month -= 12
+                    target_year += 1
+                
+                jadwal_data = get_jadwal_for_month(target_year, target_month)
+                for j in jadwal_data:
+                    date_obj = datetime.strptime(j['tanggal'], '%Y-%m-%d')
+                    all_jadwal.append({
+                        'tanggal': j['tanggal'],
+                        'hari': hari_map[date_obj.weekday()],
+                        'username': j.get('telegram_username') or j.get('username'),
+                        'user_id': j['user_id'],
+                        'group': j.get('group_name') or 'UNKNOWN',
+                        'created_at': ''
+                    })
+            
+            client.sync_all_jadwal(all_jadwal)
+            
+            # Sync semua absensi (30 hari terakhir dan 30 hari ke depan)
+            start_date = (now - timedelta(days=30)).strftime('%Y-%m-%d')
+            end_date = (now + timedelta(days=30)).strftime('%Y-%m-%d')
+            absensi_data = get_all_absensi_in_range(start_date, end_date)
+            
+            all_absensi = []
+            for a in absensi_data:
+                all_absensi.append({
+                    'tanggal': a['tanggal'],
+                    'username': a.get('username', 'Unknown'),
+                    'user_id': 0,  # Tidak tersedia di data absensi
+                    'recorded_at': ''
+                })
+            
+            client.sync_all_absensi(all_absensi)
+            
+            add_audit_log(current_user.username, 'GOOGLE_SHEETS_SYNC', 'Full sync data ke Google Sheets berhasil')
+            flash(f'✅ Full sync berhasil! {len(all_jadwal)} jadwal dan {len(all_absensi)} absensi disinkronkan.', 'success')
+            
+        except Exception as e:
+            flash(f'❌ Error saat sync: {str(e)}', 'error')
+        
+        return redirect(url_for('google_sheets'))
 
     return app
 

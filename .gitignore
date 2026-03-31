@@ -19,6 +19,7 @@ log_*.txt
 credentials.json
 token.json
 config.py
+google_credentials.json
 
 # IDE
 .vscode/

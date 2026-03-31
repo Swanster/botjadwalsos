@@ -8,6 +8,7 @@ from collections import defaultdict
 
 from config import ADMIN_ID, GROUP_CHAT_ID, ALLOWED_TOPIC_ID
 from core.database import get_bulan_dibuka, buka_bulan_baru, format_tanggal_indonesia, get_jadwal_for_month, tutup_bulan_aktif, get_user_group, get_user_by_telegram_username, set_user_group
+from core.google_sheets import get_google_sheets_client
 
 NAMA_BULAN = {
     1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
@@ -181,3 +182,60 @@ def register_admin_handlers(bot: telebot.TeleBot):
 
         except Exception as e:
             bot.reply_to(message, f"Terjadi error saat memproses file: {e}")
+
+    # =============================================================================
+    # COMMAND BARU: /export - Sync manual ke Google Sheets
+    # =============================================================================
+    @bot.message_handler(commands=['export'])
+    def handle_export(message):
+        """Command untuk manual sync data ke Google Sheets."""
+        if message.from_user.id != ADMIN_ID:
+            bot.reply_to(message, "❌ Perintah ini hanya untuk Admin.")
+            return
+
+        client = get_google_sheets_client()
+
+        if not client.is_enabled():
+            bot.reply_to(
+                message,
+                "⚠️ *Google Sheets sync belum aktif!*\n\n"
+                "Silakan setup terlebih dahulu:\n"
+                "1. Upload file `google_credentials.json`\n"
+                "2. Isi `GOOGLE_SHEET_ID` di config.py\n"
+                "3. Set `GOOGLE_SHEET_SYNC_ENABLED = True`\n\n"
+                "Lihat panduan: `GOOGLE_SHEETS_SETUP.md`",
+                parse_mode='Markdown'
+            )
+            return
+
+        try:
+            # Sync semua jadwal (bulan ini)
+            today = date.today()
+            jadwal_data = get_jadwal_for_month(today.year, today.month)
+
+            count_jadwal = 0
+            for j in jadwal_data:
+                date_obj = datetime.strptime(j['tanggal'], '%Y-%m-%d')
+                hari_map = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'Sabtu', 6: 'Minggu'}
+                hari = hari_map[date_obj.weekday()]
+
+                sync_jadwal_to_sheets(
+                    tanggal=j['tanggal'],
+                    hari=hari,
+                    username=j.get('telegram_username') or j.get('username'),
+                    user_id=j['user_id'],
+                    group=j.get('group_name') or 'UNKNOWN'
+                )
+                count_jadwal += 1
+
+            bot.reply_to(
+                message,
+                f"✅ *Export ke Google Sheets Berhasil!*\n\n"
+                f"📊 Data yang disinkronkan:\n"
+                f"• {count_jadwal} jadwal bulan ini\n\n"
+                f"Buka Google Sheets: {client.get_sheet_url()}",
+                parse_mode='Markdown'
+            )
+
+        except Exception as e:
+            bot.reply_to(message, f"❌ Error saat export: {e}")
