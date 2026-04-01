@@ -9,6 +9,12 @@ makassar_tz = pytz.timezone("Asia/Makassar")
 
 from config import DB_NAME
 
+def row_to_dict(row):
+    """Convert sqlite3.Row to dictionary."""
+    if row is None:
+        return None
+    return {key: row[key] for key in row.keys()}
+
 @contextlib.contextmanager
 def connect_db():
     conn = None
