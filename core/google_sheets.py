@@ -103,18 +103,18 @@ class GoogleSheetsClient:
     def _setup_headers_if_needed(self):
         """Setup header kolom jika sheet masih kosong."""
         try:
-            # Jadwal headers
+            # Jadwal headers - format sederhana
             jadwal_header = self.jadwal_sheet.row_values(1)
             if not jadwal_header:
                 self.jadwal_sheet.append_row([
-                    'Tanggal', 'Hari', 'Username', 'User ID', 'Group', 'Created At'
+                    'Tanggal', 'Hari', 'Nama Anggota', 'Group'
                 ])
 
             # Absensi headers
             absensi_header = self.absensi_sheet.row_values(1)
             if not absensi_header:
                 self.absensi_sheet.append_row([
-                    'Tanggal', 'Username', 'User ID', 'Recorded At'
+                    'Tanggal', 'Nama Anggota', 'Recorded At'
                 ])
 
             # Audit headers
@@ -141,11 +141,8 @@ class GoogleSheetsClient:
             return False
 
         try:
-            if created_at is None:
-                created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
             self.jadwal_sheet.append_row([
-                tanggal, hari, username, str(user_id), group, created_at
+                tanggal, hari, username, group
             ])
 
             print(f"📝 [Google Sheets] Jadwal added: {username} @ {tanggal}")
@@ -209,7 +206,7 @@ class GoogleSheetsClient:
     def sync_all_jadwal(self, jadwal_data: List[Dict[str, Any]]) -> bool:
         """
         Sync semua data jadwal (untuk full refresh).
-        jadwal_data: List of dict dengan keys: tanggal, hari, username, user_id, group, created_at
+        jadwal_data: List of dict dengan keys: tanggal, hari, username, group
         """
         if not self.enabled:
             return False
@@ -218,9 +215,9 @@ class GoogleSheetsClient:
             # Clear existing data (keep header)
             self.jadwal_sheet.clear()
 
-            # Set header
+            # Set header - format sederhana
             self.jadwal_sheet.append_row([
-                'Tanggal', 'Hari', 'Username', 'User ID', 'Group', 'Created At'
+                'Tanggal', 'Hari', 'Nama Anggota', 'Group'
             ])
 
             # Add all data
@@ -230,9 +227,7 @@ class GoogleSheetsClient:
                     entry.get('tanggal', ''),
                     entry.get('hari', ''),
                     entry.get('username', ''),
-                    str(entry.get('user_id', '')),
-                    entry.get('group', ''),
-                    entry.get('created_at', '')
+                    entry.get('group', '')
                 ])
 
             if rows:
@@ -305,7 +300,7 @@ def get_google_sheets_client() -> GoogleSheetsClient:
     return _google_sheets_client
 
 
-def sync_jadwal_to_sheets(tanggal: str, hari: str, username: str, user_id: int, group: str) -> bool:
+def sync_jadwal_to_sheets(tanggal: str, hari: str, username: str, group: str) -> bool:
     """
     Helper function untuk sync jadwal ke Google Sheets.
     Dipanggil setiap ada input jadwal baru.
@@ -315,7 +310,7 @@ def sync_jadwal_to_sheets(tanggal: str, hari: str, username: str, user_id: int, 
         tanggal=tanggal,
         hari=hari,
         username=username,
-        user_id=user_id,
+        user_id=0,  # Tidak digunakan lagi
         group=group
     )
 

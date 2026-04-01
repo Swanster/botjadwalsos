@@ -223,7 +223,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
                     tanggal=j['tanggal'],
                     hari=hari,
                     username=j.get('telegram_username') or j.get('username'),
-                    user_id=j['user_id'],
                     group=j.get('group_name') or 'UNKNOWN'
                 )
                 count_jadwal += 1

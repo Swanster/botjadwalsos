@@ -477,7 +477,6 @@ def register_user_handlers(bot: telebot.TeleBot):
                             tanggal=tanggal,
                             hari=hari,
                             username=call.from_user.username or call.from_user.first_name,
-                            user_id=user_id,
                             group=user_group or 'UNKNOWN'
                         )
                 else: # cuti

@@ -292,7 +292,7 @@ def create_app():
             
             if add_jadwal_manual(user_id, username, telegram_username, tanggal):
                 add_audit_log(current_user.username, 'ADD_SCHEDULE', f'Menambah jadwal manual untuk {username} ({user_id}) pada tanggal {tanggal}')
-                
+
                 # Sync ke Google Sheets
                 user_group = get_user_group(user_id)
                 hari_map = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'Sabtu', 6: 'Minggu'}
@@ -302,10 +302,9 @@ def create_app():
                     tanggal=tanggal,
                     hari=hari,
                     username=telegram_username or username,
-                    user_id=user_id,
                     group=user_group or 'UNKNOWN'
                 )
-                
+
                 flash(f'Jadwal untuk {username} pada {tanggal} berhasil ditambahkan.', 'success')
             else:
                 flash('Gagal menambahkan jadwal.', 'error')
@@ -588,9 +587,7 @@ def create_app():
                     'tanggal': j['tanggal'],
                     'hari': hari_map[date_obj.weekday()],
                     'username': j.get('telegram_username') or j.get('username'),
-                    'user_id': j['user_id'],
-                    'group': j.get('group_name') or 'UNKNOWN',
-                    'created_at': ''
+                    'group': j.get('group_name') or 'UNKNOWN'
                 })
 
             client.sync_all_jadwal(all_jadwal)
