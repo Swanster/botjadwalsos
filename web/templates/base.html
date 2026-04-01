@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="id" class="dark">
+<html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Dashboard{% endblock %} - Bot Jadwal SOS</title>
-    
+
     <!-- Tailwind CSS JIT CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            darkMode: 'class',
+            darkMode: false,
             theme: {
                 extend: {
                     colors: {
@@ -52,53 +52,31 @@
             }
         }
     </script>
-    
+
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
     <style type="text/tailwindcss">
         @layer base {
             :root {
                 --background: 0 0% 100%;
-                --foreground: 220.9 39.3% 11%;
+                --foreground: 240 10% 3.9%;
                 --card: 0 0% 100%;
-                --card-foreground: 220.9 39.3% 11%;
+                --card-foreground: 240 10% 3.9%;
                 --popover: 0 0% 100%;
-                --popover-foreground: 220.9 39.3% 11%;
-                --primary: 21.7 65.6% 55.5%;
+                --popover-foreground: 240 10% 3.9%;
+                --primary: 24 95% 53%;
                 --primary-foreground: 0 0% 100%;
-                --secondary: 180 17.6% 39%;
-                --secondary-foreground: 0 0% 100%;
-                --muted: 220 14.3% 95.9%;
-                --muted-foreground: 220 8.9% 46.1%;
-                --accent: 0 0% 93.3%;
-                --accent-foreground: 220.9 39.3% 11%;
+                --secondary: 240 5.9% 90%;
+                --secondary-foreground: 240 5.9% 10%;
+                --muted: 240 4.8% 95.9%;
+                --muted-foreground: 240 3.8% 46.1%;
+                --accent: 240 4.8% 95.9%;
+                --accent-foreground: 240 5.9% 10%;
                 --destructive: 0 84.2% 60.2%;
                 --destructive-foreground: 0 0% 98%;
-                --border: 220 13% 91%;
-                --input: 220 13% 91%;
-                --ring: 21.7 65.6% 55.5%;
+                --border: 240 5.9% 90%;
+                --input: 240 5.9% 90%;
+                --ring: 24 95% 53%;
                 --radius: 0.75rem;
-            }
-
-            .dark {
-                --background: 270 5.6% 7.1%;
-                --foreground: 0 0% 98%;
-                --card: 270 5.6% 7.1%;
-                --card-foreground: 0 0% 98%;
-                --popover: 270 5.6% 7.1%;
-                --popover-foreground: 0 0% 98%;
-                --primary: 22.3 75.5% 61.6%;
-                --primary-foreground: 270 5.6% 3%;
-                --secondary: 180 17.4% 45.1%;
-                --secondary-foreground: 0 0% 98%;
-                --muted: 0 0% 12%;
-                --muted-foreground: 0 0% 65%;
-                --accent: 0 0% 18%;
-                --accent-foreground: 0 0% 98%;
-                --destructive: 0 84.2% 60.2%;
-                --destructive-foreground: 0 0% 98%;
-                --border: 0 0% 15%;
-                --input: 0 0% 15%;
-                --ring: 22.3 75.5% 61.6%;
             }
 
             body { @apply font-['Inter'] bg-background text-foreground antialiased selection:bg-primary/30; }
@@ -115,14 +93,14 @@
             .btn-secondary { @apply bg-secondary text-secondary-foreground hover:bg-secondary/80; }
             .btn-ghost { @apply hover:bg-accent hover:text-accent-foreground; }
             .btn-danger { @apply bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-md shadow-destructive/20; }
-            
+
             .card { @apply rounded-lg border bg-card text-card-foreground shadow-sm; }
             .card-header { @apply flex flex-col space-y-1.5 p-6; }
             .card-title { @apply text-2xl font-bold leading-none tracking-tight; }
             .card-description { @apply text-sm text-muted-foreground; }
             .card-content { @apply p-6 pt-0; }
             .card-footer { @apply flex items-center p-6 pt-0; }
-            
+
             .input { @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200; }
         }
     </style>
@@ -139,15 +117,15 @@
             </button>
         </header>
 
-        <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-72 translate-x-[-100%] transition-transform duration-300 bg-background/50 backdrop-blur-3xl border-r md:relative md:translate-x-0 md:flex flex-col">
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-72 translate-x-[-100%] transition-transform duration-300 bg-white/80 backdrop-blur-3xl border-r border-border md:relative md:translate-x-0 md:flex flex-col">
             <div class="p-8 pb-10 flex flex-col items-center gap-4">
-                <div class="w-16 h-16 rounded-3xl bg-gradient-to-br from-primary to-orange-400 text-primary-foreground flex items-center justify-center font-black text-3xl shadow-2xl shadow-primary/30">V</div>
+                <div class="w-16 h-16 rounded-3xl bg-gradient-to-br from-primary to-orange-400 text-white flex items-center justify-center font-black text-3xl shadow-2xl shadow-primary/30">V</div>
                 <div class="text-center">
-                    <h1 class="font-black text-xl tracking-tighter">Varnion SOS</h1>
-                    <p class="text-[10px] text-primary font-bold uppercase tracking-[0.3em] mt-1 opacity-80">Dashboard Intranet</p>
+                    <h1 class="font-black text-xl tracking-tighter text-foreground">Varnion SOS</h1>
+                    <p class="text-[10px] text-primary font-bold uppercase tracking-[0.3em] mt-1">Dashboard Intranet</p>
                 </div>
             </div>
-            
+
             <nav class="flex-1 overflow-y-auto px-4 space-y-1.5 scrollbar-hide">
                 {% set menu_items = [
                     ('dashboard', '📊', 'Dashboard'),
@@ -162,16 +140,16 @@
                 ] %}
 
                 {% for endpoint, icon, label in menu_items %}
-                <a href="{{ url_for(endpoint) }}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.endpoint == endpoint %}bg-primary text-primary-foreground shadow-xl shadow-primary/20 scale-[1.02]{% else %}text-muted-foreground hover:bg-muted hover:text-foreground hover:translate-x-1{% endif %}">
+                <a href="{{ url_for(endpoint) }}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.endpoint == endpoint %}bg-gradient-to-r from-primary to-orange-400 text-white shadow-xl shadow-primary/20 scale-[1.02] font-bold{% else %}text-muted-foreground hover:bg-secondary hover:text-foreground hover:translate-x-1{% endif %}">
                     <span class="text-lg opacity-80 group-hover:scale-125 transition-transform">{{ icon }}</span>
                     <span class="text-xs font-black uppercase tracking-widest">{{ label }}</span>
                 </a>
                 {% endfor %}
             </nav>
-            
-            <div class="p-6 border-t border-border/50 bg-muted/20">
+
+            <div class="p-6 border-t border-border bg-secondary/30">
                 <div class="flex items-center gap-3 px-2 mb-4">
-                    <div class="w-10 h-10 rounded-full bg-accent flex items-center justify-center font-black text-xs text-muted-foreground border">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-orange-400 flex items-center justify-center font-black text-xs text-white shadow-lg">
                         {{ current_user.username[0]|upper if current_user.username else 'A' }}
                     </div>
                     <div class="flex flex-col">
@@ -179,7 +157,7 @@
                         <span class="text-[9px] text-muted-foreground font-bold uppercase tracking-wider">Administrator</span>
                     </div>
                 </div>
-                <a href="{{ url_for('logout') }}" class="flex items-center justify-center w-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] border border-destructive/30 rounded-xl hover:bg-destructive hover:text-white transition-all hover:shadow-lg hover:shadow-destructive/20">
+                <a href="{{ url_for('logout') }}" class="flex items-center justify-center w-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] border border-destructive text-destructive rounded-xl hover:bg-destructive hover:text-white transition-all hover:shadow-lg hover:shadow-destructive/20">
                     Selesaikan Sesi
                 </a>
             </div>
