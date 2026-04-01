@@ -2,57 +2,57 @@
 {% block title %}Jadwal Manual{% endblock %}
 
 {% block content %}
-<div class="flex flex-col space-y-8 animate-in fade-in duration-1000">
-    <!-- Header Section -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+<div class="flex flex-col space-y-4 md:space-y-8 animate-in fade-in duration-300">
+    <!-- Header Section - Mobile Optimized -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
         <div class="flex flex-col gap-1">
-            <div class="flex items-center gap-2 text-primary font-black text-[10px] uppercase tracking-[0.3em] mb-1">
-                <span class="w-8 h-[2px] bg-primary rounded-full"></span>
+            <div class="flex items-center gap-2 text-primary font-black text-[9px] md:text-[10px] uppercase tracking-[0.3em]">
+                <span class="w-6 md:w-8 h-[2px] bg-primary rounded-full"></span>
                 Operations Planning
             </div>
-            <h2 class="text-4xl font-black tracking-tighter bg-gradient-to-r from-primary via-orange-500 to-primary bg-clip-text text-transparent">📅 Penjadwalan Manual</h2>
-            <p class="text-muted-foreground text-sm max-w-xl">Kelola penugasan personil secara presisi melalui antarmuka kalender digital terpadu.</p>
+            <h2 class="text-2xl md:text-4xl font-black tracking-tighter bg-gradient-to-r from-primary via-orange-500 to-primary bg-clip-text text-transparent">📅 Penjadwalan Manual</h2>
+            <p class="text-muted-foreground text-xs md:text-sm max-w-xl">Kelola penugasan personil secara presisi melalui antarmuka kalender digital terpadu.</p>
         </div>
     </div>
 
-    <!-- Month Navigation: Centered -->
-    <div class="flex justify-center">
-        <div class="flex items-center gap-8 bg-white/80 backdrop-blur-xl border-2 border-primary/30 p-2 rounded-2xl shadow-2xl shadow-primary/10">
+    <!-- Month Navigation - Mobile Optimized -->
+    <div class="flex justify-center sticky top-20 md:top-0 z-40 -mx-3 md:mx-0 px-3 md:px-0 py-2 md:py-0 bg-background/80 backdrop-blur-md md:backdrop-blur-xl">
+        <div class="flex items-center gap-4 md:gap-8 bg-white/95 md:bg-white/80 backdrop-blur-xl border-2 border-primary/30 p-2 rounded-2xl shadow-2xl shadow-primary/10 w-full max-w-md">
             {% set prev_month = month - 1 if month > 1 else 12 %}
             {% set prev_year = year if month > 1 else year - 1 %}
             {% set next_month = month + 1 if month < 12 else 1 %}
             {% set next_year = year if month < 12 else year + 1 %}
 
             <a href="{{ url_for('schedules', year=prev_year, month=prev_month) }}"
-               class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all group">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="group-hover:-translate-x-1 transition-transform group-active:scale-90"><path d="m15 18-6-6 6-6"/></svg>
+               class="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-xl hover:bg-primary/10 active:scale-90 text-muted-foreground hover:text-primary transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
             </a>
 
-            <div class="flex flex-col items-center px-8">
-                <span class="text-2xl font-black tracking-tighter text-foreground">{{ month_name }}</span>
-                <span class="text-[10px] font-bold text-primary uppercase tracking-[0.4em]">{{ year }}</span>
+            <div class="flex flex-col items-center flex-1">
+                <span class="text-lg md:text-2xl font-black tracking-tighter text-foreground">{{ month_name }}</span>
+                <span class="text-[9px] md:text-[10px] font-bold text-primary uppercase tracking-[0.4em]">{{ year }}</span>
             </div>
 
             <a href="{{ url_for('schedules', year=next_year, month=next_month) }}"
-               class="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-primary/10 text-muted-foreground hover:text-primary transition-all group">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="group-hover:translate-x-1 transition-transform group-active:scale-90"><path d="m9 18 6-6-6-6"/></svg>
+               class="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center rounded-xl hover:bg-primary/10 active:scale-90 text-muted-foreground hover:text-primary transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
             </a>
         </div>
     </div>
 
-    <!-- Full Width Calendar -->
-    <div class="w-full">
-        <!-- Day Names Header -->
-        <div class="grid grid-cols-7 gap-3 mb-3">
+    <!-- Full Width Calendar - Mobile Optimized -->
+    <div class="w-full -mx-3 md:mx-0 px-3 md:px-0">
+        <!-- Day Names Header - Scrollable on Mobile -->
+        <div class="grid grid-cols-7 gap-2 md:gap-3 mb-2 md:mb-3 overflow-x-auto scrollbar-hide">
             {% for day_name in ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'] %}
-                <div class="text-center py-3">
-                    <span class="text-[10px] font-black uppercase tracking-[0.3em] text-primary/70 bg-primary/5 py-2 px-3 rounded-lg border border-primary/10">{{ day_name }}</span>
+                <div class="text-center py-2 md:py-3 min-w-[40px]">
+                    <span class="text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-primary/70 bg-primary/5 py-1.5 md:py-2 px-1 md:px-3 rounded-lg border border-primary/10 block">{{ day_name[:3] }}</span>
                 </div>
             {% endfor %}
         </div>
 
-        <!-- Calendar Grid -->
-        <div class="grid grid-cols-7 gap-3 p-4 bg-gradient-to-br from-primary/5 via-orange-50/30 to-primary/5 rounded-3xl border-2 border-primary/20 shadow-2xl shadow-primary/10">
+        <!-- Calendar Grid - Responsive -->
+        <div class="grid grid-cols-7 gap-2 md:gap-3 p-3 md:p-4 bg-gradient-to-br from-primary/5 via-orange-50/30 to-primary/5 rounded-2xl md:rounded-3xl border-2 border-primary/20 shadow-2xl shadow-primary/10">
             {% for week in month_calendar %}
                 {% for day in week %}
                     {% set date_str = '' %}
@@ -67,56 +67,50 @@
                         {% set can_click = not is_full %}
                     {% endif %}
 
-                    <div class="calendar-tile relative group h-36 md:h-44 rounded-2xl transition-all duration-300 overflow-hidden border-2
+                    <div class="calendar-tile relative group h-24 sm:h-28 md:h-32 lg:h-40 rounded-xl md:rounded-2xl transition-all duration-300 overflow-hidden border-2 active:scale-95
                         {% if day == 0 %} bg-muted/10 border-transparent opacity-20
                         {% elif is_full %} bg-red-500/10 border-red-500/30 grayscale-[0.3]
-                        {% else %} bg-white backdrop-blur-xl border-primary/20 hover:border-primary/60 hover:scale-[1.03] hover:shadow-2xl hover:shadow-primary/20 cursor-pointer {% endif %}
+                        {% else %} bg-white backdrop-blur-xl border-primary/20 hover:border-primary/60 active:border-primary active:shadow-xl active:shadow-primary/20 cursor-pointer {% endif %}
                         {% if day != 0 and can_click %} selectable-date {% endif %}"
                         {% if day != 0 and can_click %} data-date="{{ date_str }}" onclick="openAssignModal(this, '{{ date_str }}')" {% endif %}>
 
                         {% if day != 0 %}
                             <!-- Background Number -->
-                            <div class="absolute -right-2 -bottom-4 text-7xl font-black text-primary/5 pointer-events-none group-hover:text-primary/15 transition-colors">
+                            <div class="absolute -right-1 -bottom-2 md:-right-2 md:-bottom-4 text-5xl md:text-7xl font-black text-primary/5 pointer-events-none">
                                 {{ day }}
                             </div>
 
-                            <div class="relative p-3 h-full flex flex-col gap-2">
+                            <div class="relative p-2 md:p-3 h-full flex flex-col gap-1.5 md:gap-2">
                                 <div class="flex items-center justify-between">
-                                    <span class="text-2xl font-black tracking-tighter text-foreground group-hover:text-primary transition-colors">
+                                    <span class="text-lg md:text-2xl font-black tracking-tighter text-foreground">
                                         {{ day }}
                                     </span>
 
-                                    <!-- Capacity Pulse -->
+                                    <!-- Capacity Pulse - Mobile -->
                                     {% if is_full %}
-                                        <span class="bg-red-500/20 text-red-600 text-[8px] font-black px-2 py-0.5 rounded-full border-2 border-red-500/40 shadow-md shadow-red-500/20">FULL</span>
+                                        <span class="bg-red-500/20 text-red-600 text-[7px] md:text-[8px] font-black px-1.5 md:px-2 py-0.5 rounded-full border-2 border-red-500/40">FULL</span>
                                     {% elif limit_info.current > 0 %}
-                                        <div class="flex items-center gap-1.5 bg-primary/20 px-2 py-0.5 rounded-full border-2 border-primary/40 shadow-md shadow-primary/20">
-                                            <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                                            <span class="text-[9px] font-black text-primary">{{ limit_info.current }}/{{ limit_info.limit }}</span>
+                                        <div class="flex items-center gap-1 bg-primary/20 px-1.5 md:px-2 py-0.5 rounded-full border-2 border-primary/40">
+                                            <span class="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-primary animate-pulse"></span>
+                                            <span class="text-[7px] md:text-[9px] font-black text-primary">{{ limit_info.current }}/{{ limit_info.limit }}</span>
                                         </div>
                                     {% endif %}
                                 </div>
 
-                                <!-- Member Chips Grid -->
-                                <div class="flex-1 space-y-1 overflow-y-auto pr-1 custom-scrollbar scroll-smooth">
+                                <!-- Member Chips Grid - Mobile Optimized -->
+                                <div class="flex-1 space-y-0.5 md:space-y-1 overflow-y-auto pr-0.5 md:pr-1 custom-scrollbar scroll-smooth">
                                     {% if date_str in jadwal_per_tanggal %}
                                         {% for j in jadwal_per_tanggal[date_str] %}
-                                            <div class="flex items-center justify-between p-1.5 rounded-lg bg-gradient-to-r from-primary/10 to-orange-400/10 border-2 border-primary/30 text-[9px] font-black shadow-md shadow-primary/10 group/chip hover:border-primary/60 transition-all">
-                                                <div class="flex items-center gap-1.5 truncate">
-                                                    <div class="w-1.5 h-1.5 rounded-full bg-primary shadow-sm"></div>
-                                                    <span class="truncate">{{ j.username or j.telegram_username }}</span>
+                                            <div class="flex items-center justify-between p-1 md:p-1.5 rounded-md md:rounded-lg bg-gradient-to-r from-primary/10 to-orange-400/10 border border-primary/30 text-[7px] md:text-[9px] font-black shadow-sm">
+                                                <div class="flex items-center gap-1 truncate">
+                                                    <div class="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-primary flex-shrink-0"></div>
+                                                    <span class="truncate">{{ (j.username or j.telegram_username)[:8] }}{% if (j.username or j.telegram_username)|length > 8 %}..{% endif %}</span>
                                                 </div>
-                                                <form method="POST" action="{{ url_for('delete_schedule', jadwal_id=j.id) }}" class="opacity-0 group-hover/chip:opacity-100 transition-opacity">
-                                                    <button type="submit" class="text-red-500 hover:scale-125 transition-transform"
-                                                            onclick="event.stopPropagation(); return confirm('Hapus jadwal {{ j.username }}?')">
-                                                        ✕
-                                                    </button>
-                                                </form>
                                             </div>
                                         {% endfor %}
                                     {% else %}
-                                        <div class="flex items-center justify-center h-full text-muted-foreground/40 text-[10px] font-bold">
-                                            Klik untuk assign
+                                        <div class="flex items-center justify-center h-full text-muted-foreground/30 text-[8px] md:text-[10px] font-bold">
+                                            +
                                         </div>
                                     {% endif %}
                                 </div>
@@ -129,41 +123,41 @@
     </div>
 </div>
 
-<!-- Assign Member Modal -->
-<div id="assignModal" class="fixed inset-0 z-50 hidden">
+<!-- Assign Member Modal - Mobile Optimized -->
+<div id="assignModal" class="fixed inset-0 z-[70] hidden">
     <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onclick="closeAssignModal()"></div>
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in" onclick="closeAssignModal()"></div>
     
-    <!-- Modal Content -->
-    <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl shadow-2xl shadow-black/50 w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border-2 border-primary/30">
+    <!-- Modal Content - Bottom Sheet on Mobile -->
+    <div class="absolute inset-x-0 bottom-0 md:inset-auto md:inset-0 flex items-end md:items-center justify-center p-0 md:p-4">
+        <div class="bg-white md:rounded-3xl rounded-t-3xl shadow-2xl shadow-black/50 w-full max-w-md max-h-[85vh] md:max-h-auto overflow-hidden animate-slide-up md:animate-zoom-in-95 border-t-2 md:border-2 border-primary/30">
             <!-- Modal Header -->
-            <div class="bg-gradient-to-r from-primary to-orange-500 p-6 text-white">
+            <div class="bg-gradient-to-r from-primary to-orange-500 p-4 md:p-6 text-white">
                 <div class="flex items-center justify-between">
-                    <div>
-                        <h3 class="text-xl font-black tracking-tight">📅 Assign Member</h3>
-                        <p id="modalDate" class="text-sm font-bold text-white/80 mt-1">-</p>
+                    <div class="flex-1">
+                        <h3 class="text-lg md:text-xl font-black tracking-tight">📅 Assign Member</h3>
+                        <p id="modalDate" class="text-xs md:text-sm font-bold text-white/80 mt-0.5 md:mt-1">-</p>
                     </div>
-                    <button onclick="closeAssignModal()" class="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 transition-colors flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    <button onclick="closeAssignModal()" class="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/20 hover:bg-white/30 active:scale-90 transition-all flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                     </button>
                 </div>
             </div>
             
-            <!-- Modal Body -->
-            <div class="p-6 space-y-6">
+            <!-- Modal Body - Scrollable -->
+            <div class="p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto max-h-[60vh]">
                 <!-- Assigned Members List -->
                 <div id="assignedMembers" class="space-y-2">
                     <!-- Will be populated by JS -->
                 </div>
                 
                 <!-- Add Member Form -->
-                <form method="POST" action="{{ url_for('add_schedule') }}" class="space-y-4">
+                <form method="POST" action="{{ url_for('add_schedule') }}" class="space-y-3 md:space-y-4 sticky bottom-0 bg-white pt-4 border-t border-border">
                     <input type="hidden" id="modalTanggal" name="tanggal">
                     
                     <div class="space-y-2">
-                        <label class="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Pilih Member</label>
-                        <select id="modalUserId" name="user_id" required class="input w-full bg-secondary/20 focus:bg-white transition-all border-2 border-primary/30 focus:border-primary">
+                        <label class="text-[9px] md:text-[10px] font-black uppercase text-muted-foreground tracking-widest">Pilih Member</label>
+                        <select id="modalUserId" name="user_id" required class="input w-full bg-secondary/20 focus:bg-white transition-all border-2 border-primary/30 focus:border-primary text-sm md:text-base py-3 md:py-2">
                             <option value="">-- Pilih Anggota --</option>
                             {% for m in all_members %}
                             <option value="{{ m.user_id }}">{{ m.username or m.telegram_username }} ({{ m.group_name }})</option>
@@ -171,7 +165,7 @@
                         </select>
                     </div>
                     
-                    <button type="submit" class="btn btn-primary w-full py-4 rounded-xl shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-2 bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90">
+                    <button type="submit" class="btn btn-primary w-full py-3 md:py-4 rounded-xl shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-2 bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90 active:scale-95 text-sm md:text-base">
                         <span>✅ Sematkan Jadwal</span>
                     </button>
                 </form>
@@ -190,6 +184,21 @@
     box-shadow: 0 25px 50px -12px rgba(var(--primary), 0.3), 0 0 0 4px rgba(var(--primary), 0.2) !important; 
     transform: scale(0.98); 
 }
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+    .calendar-tile {
+        @apply will-change-transform;
+    }
+    
+    #assignModal > div {
+        @apply will-change-transform;
+    }
+    
+    .safe-area-inset-top {
+        padding-top: env(safe-area-inset-top);
+    }
+}
 </style>
 
 <script>
@@ -203,7 +212,7 @@ function openAssignModal(cell, dateStr) {
     const modalTanggal = document.getElementById('modalTanggal');
     const assignedMembersDiv = document.getElementById('assignedMembers');
     
-    // Set date
+    // Set date with Indonesian locale
     const dateObj = new Date(dateStr + 'T00:00:00');
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
     modalDate.textContent = dateObj.toLocaleDateString('id-ID', options);
@@ -214,21 +223,21 @@ function openAssignModal(cell, dateStr) {
     if (schedules.length > 0) {
         assignedMembersDiv.innerHTML = `
             <div class="space-y-2">
-                <div class="text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                    📋 PIC Terassign (${schedules.length})
+                <div class="text-[9px] font-black uppercase text-muted-foreground tracking-widest flex items-center justify-between">
+                    <span>📋 PIC Terassign (${schedules.length})</span>
                 </div>
                 ${schedules.map(j => `
-                    <div class="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-primary/10 to-orange-400/10 border-2 border-primary/30">
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-primary/10 to-orange-400/10 border-2 border-primary/30 active:scale-95 transition-transform">
                         <div class="flex items-center gap-2">
-                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-orange-400 flex items-center justify-center text-white font-black text-xs shadow-md">
+                            <div class="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-orange-400 flex items-center justify-center text-white font-black text-xs shadow-md flex-shrink-0">
                                 ${(j.username || j.telegram_username || '?')[0].toUpperCase()}
                             </div>
-                            <div>
-                                <div class="text-sm font-black text-foreground">${j.username || j.telegram_username}</div>
+                            <div class="min-w-0">
+                                <div class="text-sm font-black text-foreground truncate">${j.username || j.telegram_username}</div>
                                 <div class="text-[9px] text-muted-foreground font-bold">${j.group_name || '-'}</div>
                             </div>
                         </div>
-                        <button type="button" class="w-8 h-8 rounded-full bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white transition-all flex items-center justify-center border-2 border-red-500/30 hover:border-red-500"
+                        <button type="button" class="w-8 h-8 rounded-full bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white active:scale-90 transition-all flex items-center justify-center border-2 border-red-500/30 flex-shrink-0"
                                 onclick="deleteJadwal(${j.id}, '${j.username || j.telegram_username}')">
                             ✕
                         </button>
@@ -238,14 +247,15 @@ function openAssignModal(cell, dateStr) {
         `;
     } else {
         assignedMembersDiv.innerHTML = `
-            <div class="text-center py-6 text-muted-foreground/50">
-                <div class="text-4xl mb-2">📭</div>
+            <div class="text-center py-8 text-muted-foreground/50">
+                <div class="text-5xl mb-3">📭</div>
                 <div class="text-sm font-bold">Belum ada PIC terassign</div>
+                <div class="text-xs mt-1">Klik tombol di bawah untuk menambah</div>
             </div>
         `;
     }
     
-    // Show modal
+    // Show modal with animation
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
 }
@@ -258,7 +268,6 @@ function closeAssignModal() {
 
 function deleteJadwal(jadwalId, username) {
     if (confirm(`Hapus jadwal ${username}?`)) {
-        // Create form and submit
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = '/schedules/' + jadwalId + '/delete';
@@ -273,5 +282,26 @@ document.addEventListener('keydown', function(e) {
         closeAssignModal();
     }
 });
+
+// Close modal on swipe down (mobile)
+let touchStartY = 0;
+let touchEndY = 0;
+const modal = document.getElementById('assignModal');
+
+modal.addEventListener('touchstart', e => {
+    touchStartY = e.changedTouches[0].screenY;
+}, { passive: true });
+
+modal.addEventListener('touchend', e => {
+    touchEndY = e.changedTouches[0].screenY;
+    if (touchEndY - touchStartY > 100) {
+        closeAssignModal();
+    }
+}, { passive: true });
+
+// Prevent modal close on content scroll
+document.querySelector('#assignedMembers')?.addEventListener('touchmove', e => {
+    e.stopPropagation();
+}, { passive: true });
 </script>
 {% endblock %}

@@ -2,7 +2,10 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#f97316">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{% block title %}Dashboard{% endblock %} - Bot Jadwal SOS</title>
 
     <!-- Tailwind CSS JIT CDN -->
@@ -48,6 +51,30 @@
                         md: "calc(var(--radius) - 2px)",
                         sm: "calc(var(--radius) - 4px)",
                     },
+                    animation: {
+                        'slide-up': 'slide-up 0.3s ease-out',
+                        'slide-down': 'slide-down 0.3s ease-out',
+                        'fade-in': 'fade-in 0.2s ease-out',
+                        'scale-in': 'scale-in 0.2s ease-out',
+                    },
+                    keyframes: {
+                        'slide-up': {
+                            '0%': { transform: 'translateY(100%)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        },
+                        'slide-down': {
+                            '0%': { transform: 'translateY(-100%)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        },
+                        'fade-in': {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        'scale-in': {
+                            '0%': { transform: 'scale(0.95)', opacity: '0' },
+                            '100%': { transform: 'scale(1)', opacity: '1' },
+                        },
+                    },
                 }
             }
         }
@@ -79,8 +106,29 @@
                 --radius: 0.75rem;
             }
 
-            body { @apply font-['Inter'] bg-background text-foreground antialiased selection:bg-primary/30; }
+            * {
+                @apply touch-manipulation;
+            }
+
+            body { 
+                @apply font-['Inter'] bg-background text-foreground antialiased selection:bg-primary/30;
+                -webkit-tap-highlight-color: transparent;
+                overscroll-behavior: none;
+            }
+            
             h1, h2, h3, h4, h5, h6 { @apply font-['Outfit'] tracking-tight; }
+
+            /* Mobile Optimizations */
+            @media (max-width: 768px) {
+                * {
+                    -webkit-font-smoothing: antialiased;
+                    -moz-osx-font-smoothing: grayscale;
+                }
+                
+                .card, .btn, input, select {
+                    @apply will-change-transform;
+                }
+            }
 
             /* Custom Premium Scrollbar */
             ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -89,10 +137,10 @@
         }
         @layer components {
             .btn { @apply inline-flex items-center justify-center rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 active:scale-95; }
-            .btn-primary { @apply bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20; }
-            .btn-secondary { @apply bg-secondary text-secondary-foreground hover:bg-secondary/80; }
-            .btn-ghost { @apply hover:bg-accent hover:text-accent-foreground; }
-            .btn-danger { @apply bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-md shadow-destructive/20; }
+            .btn-primary { @apply bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20 active:scale-95 transition-transform; }
+            .btn-secondary { @apply bg-secondary text-secondary-foreground hover:bg-secondary/80 active:scale-95 transition-transform; }
+            .btn-ghost { @apply hover:bg-accent hover:text-accent-foreground active:scale-95 transition-transform; }
+            .btn-danger { @apply bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-md shadow-destructive/20 active:scale-95 transition-transform; }
 
             .card { @apply rounded-lg border bg-card text-card-foreground shadow-sm; }
             .card-header { @apply flex flex-col space-y-1.5 p-6; }
@@ -101,24 +149,31 @@
             .card-content { @apply p-6 pt-0; }
             .card-footer { @apply flex items-center p-6 pt-0; }
 
-            .input { @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200; }
+            .input { @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-200 active:scale-[0.98]; }
         }
     </style>
 </head>
 <body class="min-h-screen">
     <div class="flex flex-col md:flex-row min-h-screen">
-        <!-- Mobile Header -->
-        <header class="md:hidden flex items-center justify-between p-4 border-b bg-background sticky top-0 z-50">
-            <div class="flex items-center gap-2">
-                <span class="text-xl font-bold">JSOS</span>
+        <!-- Mobile Header - Optimized -->
+        <header class="md:hidden fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-b border-border shadow-lg shadow-black/5">
+            <div class="flex items-center justify-between px-4 py-3 safe-area-inset-top">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-orange-400 flex items-center justify-center font-black text-lg text-white shadow-lg shadow-primary/30">V</div>
+                    <div>
+                        <h1 class="font-black text-base tracking-tight text-foreground">Varnion SOS</h1>
+                        <p class="text-[9px] text-primary font-bold uppercase tracking-widest -mt-0.5">Dashboard</p>
+                    </div>
+                </div>
+                <button id="mobile-menu-btn" class="w-10 h-10 rounded-xl hover:bg-secondary active:scale-95 transition-all flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+                </button>
             </div>
-            <button id="mobile-menu-btn" class="p-2 rounded-md hover:bg-accent">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
-            </button>
         </header>
 
-        <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-72 translate-x-[-100%] transition-transform duration-300 bg-white/80 backdrop-blur-3xl border-r border-border md:relative md:translate-x-0 md:flex flex-col">
-            <div class="p-8 pb-10 flex flex-col items-center gap-4">
+        <!-- Sidebar - Desktop & Mobile -->
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-[60] w-72 translate-x-[-100%] transition-transform duration-300 ease-out bg-white/98 backdrop-blur-2xl border-r border-border md:relative md:translate-x-0 md:flex flex-col shadow-2xl md:shadow-none">
+            <div class="p-8 pb-6 flex flex-col items-center gap-4">
                 <div class="w-16 h-16 rounded-3xl bg-gradient-to-br from-primary to-orange-400 text-white flex items-center justify-center font-black text-3xl shadow-2xl shadow-primary/30">V</div>
                 <div class="text-center">
                     <h1 class="font-black text-xl tracking-tighter text-foreground">Varnion SOS</h1>
@@ -140,15 +195,15 @@
                 ] %}
 
                 {% for endpoint, icon, label in menu_items %}
-                <a href="{{ url_for(endpoint) }}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.endpoint == endpoint %}bg-gradient-to-r from-primary to-orange-400 text-white shadow-xl shadow-primary/20 scale-[1.02] font-bold{% else %}text-muted-foreground hover:bg-secondary hover:text-foreground hover:translate-x-1{% endif %}">
+                <a href="{{ url_for(endpoint) }}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.endpoint == endpoint %}bg-gradient-to-r from-primary to-orange-400 text-white shadow-xl shadow-primary/20 scale-[1.02] font-bold{% else %}text-muted-foreground hover:bg-secondary hover:text-foreground hover:translate-x-1 active:scale-95{% endif %}">
                     <span class="text-lg opacity-80 group-hover:scale-125 transition-transform">{{ icon }}</span>
                     <span class="text-xs font-black uppercase tracking-widest">{{ label }}</span>
                 </a>
                 {% endfor %}
             </nav>
 
-            <div class="p-6 border-t border-border bg-secondary/30">
-                <div class="flex items-center gap-3 px-2 mb-4">
+            <div class="p-4 border-t border-border bg-secondary/30">
+                <div class="flex items-center gap-3 px-2 mb-3">
                     <div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-orange-400 flex items-center justify-center font-black text-xs text-white shadow-lg">
                         {{ current_user.username[0]|upper if current_user.username else 'A' }}
                     </div>
@@ -157,50 +212,79 @@
                         <span class="text-[9px] text-muted-foreground font-bold uppercase tracking-wider">Administrator</span>
                     </div>
                 </div>
-                <a href="{{ url_for('logout') }}" class="flex items-center justify-center w-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] border border-destructive text-destructive rounded-xl hover:bg-destructive hover:text-white transition-all hover:shadow-lg hover:shadow-destructive/20">
+                <a href="{{ url_for('logout') }}" class="flex items-center justify-center w-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] border-2 border-destructive text-destructive rounded-xl hover:bg-destructive hover:text-white transition-all active:scale-95">
                     Selesaikan Sesi
                 </a>
             </div>
         </aside>
 
-        <!-- Overlay for Mobile Sidebar -->
-        <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"></div>
+        <!-- Overlay for Mobile Sidebar - Improved -->
+        <div id="sidebar-overlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[55] hidden md:hidden animate-fade-in" onclick="toggleMenu()"></div>
         
         <!-- Main Content -->
-        <main class="flex-1 p-4 md:p-8 md:max-w-7xl mx-auto w-full overflow-x-hidden">
-            <!-- Flash Messages -->
+        <main class="flex-1 p-3 md:p-8 md:max-w-7xl mx-auto w-full overflow-x-hidden pt-20 md:pt-0">
+            <!-- Flash Messages - Mobile Optimized -->
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
-                    <div class="mb-8 space-y-2">
+                    <div class="mb-4 space-y-2">
                         {% for category, message in messages %}
-                            <div class="flex items-center justify-between p-4 rounded-md border {% if category == 'success' %}bg-green-50 text-green-700 border-green-200{% elif category == 'error' %}bg-red-50 text-red-700 border-red-200{% else %}bg-blue-50 text-blue-700 border-blue-200{% endif %}" role="alert">
-                                <span>{{ message }}</span>
-                                <button onclick="this.parentElement.remove()" class="text-lg leading-none">&times;</button>
+                            <div class="flex items-center justify-between p-3 rounded-xl border animate-slide-down {% if category == 'success' %}bg-green-50 text-green-700 border-green-200{% elif category == 'error' %}bg-red-50 text-red-700 border-red-200{% else %}bg-blue-50 text-blue-700 border-blue-200{% endif %}" role="alert">
+                                <span class="text-sm font-medium">{{ message }}</span>
+                                <button onclick="this.parentElement.remove()" class="text-lg leading-none ml-2 active:scale-90 transition-transform">✕</button>
                             </div>
                         {% endfor %}
                     </div>
                 {% endif %}
             {% endwith %}
-            
-            <div class="animate-in fade-in duration-500">
+
+            <div class="animate-in fade-in duration-300">
                 {% block content %}{% endblock %}
             </div>
         </main>
     </div>
-    
+
     <script>
-        // Mobile Sidebar Toggle
+        // Optimized Mobile Sidebar Toggle
         const btn = document.getElementById('mobile-menu-btn');
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebar-overlay');
+        let isMenuOpen = false;
 
         function toggleMenu() {
-            sidebar.classList.toggle('translate-x-[-100%]');
-            overlay.classList.toggle('hidden');
+            isMenuOpen = !isMenuOpen;
+            if (isMenuOpen) {
+                sidebar.classList.remove('translate-x-[-100%]');
+                overlay.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+            } else {
+                sidebar.classList.add('translate-x-[-100%]');
+                overlay.classList.add('hidden');
+                document.body.style.overflow = '';
+            }
         }
 
         if (btn) btn.addEventListener('click', toggleMenu);
         if (overlay) overlay.addEventListener('click', toggleMenu);
+
+        // Close on swipe
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        document.addEventListener('touchend', e => {
+            touchEndX = e.changedTouches[0].screenX;
+            if (isMenuOpen && touchStartX - touchEndX > 50) {
+                toggleMenu();
+            }
+        }, { passive: true });
+
+        // Prevent double-tap zoom
+        document.addEventListener('dblclick', e => {
+            e.preventDefault();
+        }, { passive: false });
     </script>
 </body>
 </html>
