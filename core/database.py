@@ -266,7 +266,7 @@ def get_jadwal_for_specific_date(tanggal_str):
             WHERE j.tanggal = ?
         """
         cur.execute(query, (tanggal_str,))
-        return cur.fetchall()
+        return [row_to_dict(row) for row in cur.fetchall()]
 
 def get_user_by_telegram_username(username):
     """Mengambil user berdasarkan telegram username dari user_groups."""
@@ -277,7 +277,7 @@ def get_user_by_telegram_username(username):
             "SELECT user_id, username, telegram_username FROM user_groups WHERE telegram_username = ? COLLATE NOCASE LIMIT 1",
             (clean_username,)
         )
-        return cur.fetchone()
+        return row_to_dict(cur.fetchone())
 
 def create_tukar_request(user_a_id, user_a_username, user_b_id, tanggal_a, tanggal_b):
     waktu = datetime.now(pytz.timezone("Asia/Makassar")).strftime('%Y-%m-%d %H:%M:%S')
@@ -291,7 +291,7 @@ def get_tukar_request_by_id(request_id):
     with connect_db() as conn:
         cur = conn.cursor()
         cur.execute("SELECT * FROM tukar_requests WHERE id = ?", (request_id,))
-        return cur.fetchone()
+        return row_to_dict(cur.fetchone())
 
 def execute_swap(request_id):
     """Menukar jadwal antara dua user. Username diambil dari user_groups."""
@@ -470,7 +470,7 @@ def verify_admin(username, password):
         cur.execute("SELECT * FROM admin_users WHERE username = ?", (username,))
         admin = cur.fetchone()
         if admin and bcrypt.checkpw(password.encode('utf-8'), admin['password_hash'].encode('utf-8')):
-            return dict(admin)
+            return row_to_dict(admin)
         return None
 
 def get_admin_by_username(username):
@@ -479,7 +479,7 @@ def get_admin_by_username(username):
         cur = conn.cursor()
         cur.execute("SELECT id, username, created_at FROM admin_users WHERE username = ?", (username,))
         result = cur.fetchone()
-        return dict(result) if result else None
+        return row_to_dict(result) if result else None
 
 def update_admin_password(username, new_password):
     """Memperbarui password admin."""
@@ -496,7 +496,7 @@ def get_all_admin_users():
     with connect_db() as conn:
         cur = conn.cursor()
         cur.execute("SELECT id, username, created_at FROM admin_users")
-        return [dict(row) for row in cur.fetchall()]
+        return [row_to_dict(row) for row in cur.fetchall()]
 
 def delete_admin_user(admin_id):
     """Menghapus admin user berdasarkan ID."""
