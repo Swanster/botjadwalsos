@@ -31,8 +31,15 @@ HARI_MAP_ID = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'S
 EMOJI_HARI = {'Senin':'🌞','Selasa':'📘','Rab':'📗','Kamis':'📙','Jumat':'📕','Sabtu':'🎉','Minggu':'🛌'}
 
 def is_allowed(message):
-    if message.chat.type == 'private': return True
-    if ALLOWED_TOPIC_ID and message.chat.type in ['group', 'supergroup']: return message.message_thread_id == ALLOWED_TOPIC_ID
+    """Cek apakah message berasal dari chat yang diizinkan."""
+    if message.chat.type == 'private': 
+        return True
+    if message.chat.type in ['group', 'supergroup']:
+        # Jika ALLOWED_TOPIC_ID tidak di-set (None), izinkan semua group
+        # Jika di-set, hanya izinkan topic yang sesuai
+        if ALLOWED_TOPIC_ID is None:
+            return True
+        return message.message_thread_id == ALLOWED_TOPIC_ID
     return False
 
 def get_hari_from_date(date_str: str) -> str:
