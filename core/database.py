@@ -221,7 +221,7 @@ def get_jadwal_for_month(tahun, bulan):
             WHERE j.tanggal BETWEEN ? AND ?
         """
         cur.execute(query, (start_date, end_date))
-        return cur.fetchall()
+        return [row_to_dict(row) for row in cur.fetchall()]
 
 def get_user_absensi_in_range(user_id, start_date, end_date):
     with connect_db() as conn:
