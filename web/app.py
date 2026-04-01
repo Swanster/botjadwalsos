@@ -564,51 +564,49 @@ def create_app():
     @app.route('/google-sheets/sync-all', methods=['POST'])
     @login_required
     def sync_all_to_sheets():
-        """Full sync semua data jadwal dan absensi ke Google Sheets."""
+        """Full sync semua data jadwal dan absensi ke Google Sheets (hanya bulan berjalan)."""
         try:
             from core.database import get_all_absensi_in_range, get_jadwal_for_month
-            
+
             client = get_google_sheets_client()
-            
+
             if not client.is_enabled():
                 flash('Google Sheets sync belum aktif. Periksa konfigurasi.', 'error')
                 return redirect(url_for('google_sheets'))
-            
-            # Sync semua jadwal (ambil 3 bulan terakhir dan 3 bulan ke depan)
+
+            # Sync semua jadwal (hanya bulan yang sedang berjalan)
             from datetime import datetime, timedelta
             now = datetime.now()
             hari_map = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'Sabtu', 6: 'Minggu'}
-            
+
             all_jadwal = []
-            for month_offset in range(-3, 4):
-                target_month = now.month + month_offset
-                target_year = now.year
-                if target_month < 1:
-                    target_month += 12
-                    target_year -= 1
-                elif target_month > 12:
-                    target_month -= 12
-                    target_year += 1
-                
-                jadwal_data = get_jadwal_for_month(target_year, target_month)
-                for j in jadwal_data:
-                    date_obj = datetime.strptime(j['tanggal'], '%Y-%m-%d')
-                    all_jadwal.append({
-                        'tanggal': j['tanggal'],
-                        'hari': hari_map[date_obj.weekday()],
-                        'username': j.get('telegram_username') or j.get('username'),
-                        'user_id': j['user_id'],
-                        'group': j.get('group_name') or 'UNKNOWN',
-                        'created_at': ''
-                    })
-            
+            # Hanya ambil data bulan ini
+            jadwal_data = get_jadwal_for_month(now.year, now.month)
+            for j in jadwal_data:
+                date_obj = datetime.strptime(j['tanggal'], '%Y-%m-%d')
+                all_jadwal.append({
+                    'tanggal': j['tanggal'],
+                    'hari': hari_map[date_obj.weekday()],
+                    'username': j.get('telegram_username') or j.get('username'),
+                    'user_id': j['user_id'],
+                    'group': j.get('group_name') or 'UNKNOWN',
+                    'created_at': ''
+                })
+
             client.sync_all_jadwal(all_jadwal)
+
+            # Sync semua absensi (hanya bulan yang sedang berjalan)
+            # Ambil dari awal bulan sampai akhir bulan
+            start_date = now.replace(day=1).strftime('%Y-%m-%d')
+            # Cari hari terakhir bulan ini
+            if now.month == 12:
+                end_date = f"{now.year}-12-31"
+            else:
+                next_month = now.replace(month=now.month + 1, day=1)
+                end_date = (next_month - timedelta(days=1)).strftime('%Y-%m-%d')
             
-            # Sync semua absensi (30 hari terakhir dan 30 hari ke depan)
-            start_date = (now - timedelta(days=30)).strftime('%Y-%m-%d')
-            end_date = (now + timedelta(days=30)).strftime('%Y-%m-%d')
             absensi_data = get_all_absensi_in_range(start_date, end_date)
-            
+
             all_absensi = []
             for a in absensi_data:
                 all_absensi.append({
@@ -617,15 +615,15 @@ def create_app():
                     'user_id': 0,  # Tidak tersedia di data absensi
                     'recorded_at': ''
                 })
-            
+
             client.sync_all_absensi(all_absensi)
-            
+
             add_audit_log(current_user.username, 'GOOGLE_SHEETS_SYNC', 'Full sync data ke Google Sheets berhasil')
             flash(f'✅ Full sync berhasil! {len(all_jadwal)} jadwal dan {len(all_absensi)} absensi disinkronkan.', 'success')
-            
+
         except Exception as e:
             flash(f'❌ Error saat sync: {str(e)}', 'error')
-        
+
         return redirect(url_for('google_sheets'))
 
     return app
