@@ -223,9 +223,9 @@
                                     {{ day }}
                                 </div>
 
-                                <div class="relative p-1 md:p-1.5 h-full flex flex-col gap-0.5">
+                                <div class="relative p-1.5 md:p-2 h-full flex flex-col gap-1">
                                     <div class="flex items-center justify-between flex-shrink-0">
-                                        <span class="text-sm md:text-lg font-black tracking-tighter
+                                        <span class="text-base md:text-xl font-black tracking-tighter
                                             {% if date_str in jadwal_per_tanggal %} text-foreground
                                             {% else %} text-muted-foreground/60 {% endif %}">
                                             {{ day }}
@@ -233,31 +233,31 @@
 
                                         <!-- Capacity Pulse -->
                                         {% if is_full %}
-                                            <span class="bg-red-500/20 text-red-600 text-[6px] md:text-[7px] font-black px-1 py-px rounded-full border border-red-500/40">FULL</span>
+                                            <span class="bg-red-500/20 text-red-600 text-[8px] md:text-[9px] font-black px-1.5 py-0.5 rounded-full border border-red-500/40">FULL</span>
                                         {% elif limit_info.current > 0 %}
-                                            <div class="flex items-center gap-0.5 bg-primary/20 px-1 py-px rounded-full border border-primary/40">
-                                                <span class="w-1 h-1 rounded-full bg-primary animate-pulse"></span>
-                                                <span class="text-[6px] md:text-[7px] font-black text-primary">{{ limit_info.current }}/{{ limit_info.limit }}</span>
+                                            <div class="flex items-center gap-1 bg-primary/20 px-1.5 py-0.5 rounded-full border border-primary/40">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                                                <span class="text-[8px] md:text-[9px] font-black text-primary">{{ limit_info.current }}/{{ limit_info.limit }}</span>
                                             </div>
                                         {% endif %}
                                     </div>
 
                                     <!-- Member Chips Grid -->
-                                    <div class="flex-1 space-y-0.5 overflow-y-auto pr-0.5 custom-scrollbar scroll-smooth">
+                                    <div class="flex-1 space-y-1 overflow-y-auto pr-1 custom-scrollbar scroll-smooth">
                                         {% if date_str in jadwal_per_tanggal %}
                                             {% for j in jadwal_per_tanggal[date_str] %}
-                                                <div class="flex items-center justify-between p-0.5 md:p-1 rounded bg-gradient-to-r from-primary/10 to-orange-400/10 border border-primary/30 text-[6px] md:text-[7px] font-black shadow-sm">
-                                                    <div class="flex items-center gap-0.5 truncate flex-1">
-                                                        <div class="w-1 h-1 rounded-full bg-primary flex-shrink-0"></div>
-                                                        <span class="truncate">{{ (j.username or j.telegram_username)[:6] }}{% if (j.username or j.telegram_username)|length > 6 %}..{% endif %}</span>
+                                                <div class="flex items-center justify-between p-1 md:p-1.5 rounded-lg bg-gradient-to-r from-primary/10 to-orange-400/10 border border-primary/30 text-[9px] md:text-[10px] font-black shadow-sm">
+                                                    <div class="flex items-center gap-1 truncate flex-1">
+                                                        <div class="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0"></div>
+                                                        <span class="truncate">{{ (j.username or j.telegram_username)[:8] }}{% if (j.username or j.telegram_username)|length > 8 %}..{% endif %}</span>
                                                     </div>
-                                                    <span class="text-[5px] md:text-[6px] text-muted-foreground ml-0.5 flex-shrink-0">{{ j.group_name }}</span>
+                                                    <span class="text-[7px] md:text-[8px] text-muted-foreground ml-1 flex-shrink-0 font-bold">{{ j.group_name }}</span>
                                                 </div>
                                             {% endfor %}
                                         {% else %}
                                             <div class="flex flex-col items-center justify-center h-full text-muted-foreground/40">
-                                                <div class="text-base md:text-lg font-bold mb-0.5">+</div>
-                                                <div class="text-[6px] md:text-[7px] font-medium">Belum ada jadwal</div>
+                                                <div class="text-xl md:text-2xl font-bold mb-0.5">+</div>
+                                                <div class="text-[8px] md:text-[9px] font-medium">Belum ada jadwal</div>
                                             </div>
                                         {% endif %}
                                     </div>
