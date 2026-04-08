@@ -63,11 +63,11 @@ def create_app():
     def login():
         if current_user.is_authenticated:
             return redirect(url_for('dashboard'))
-        
+
         if request.method == 'POST':
             username = request.form.get('username', '')
             password = request.form.get('password', '')
-            
+
             admin = verify_admin(username, password)
             if admin:
                 user = User(admin['username'])
@@ -77,8 +77,71 @@ def create_app():
                 return redirect(url_for('dashboard'))
             else:
                 flash('Username atau password salah.', 'error')
-        
-        return render_template('login.html')
+
+        # Get calendar data for current month (like schedules page)
+        from datetime import date
+        today = date.today()
+        year = request.args.get('year', today.year, type=int)
+        month = request.args.get('month', today.month, type=int)
+
+        # Get schedules for the month
+        jadwal_list = get_jadwal_for_month(year, month)
+
+        # Build member lookup for group info
+        members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
+        members_ce = [dict(m) for m in get_all_users_in_group('CE')]
+        members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
+        members_monitoring = [dict(m) for m in get_all_users_in_group('MONITORING')]
+        all_members = members_infra + members_ce + members_apps + members_monitoring
+
+        # Create user_id to group_name mapping
+        user_group_map = {}
+        for m in all_members:
+            user_group_map[m['user_id']] = m.get('group_name', '-')
+
+        # Organize by date and add group_name
+        jadwal_per_tanggal = {}
+        for j in jadwal_list:
+            tanggal = j['tanggal']
+            j_dict = dict(j)
+            # Add group_name from lookup
+            j_dict['group_name'] = user_group_map.get(j['user_id'], '-')
+            if tanggal not in jadwal_per_tanggal:
+                jadwal_per_tanggal[tanggal] = []
+            jadwal_per_tanggal[tanggal].append(j_dict)
+
+        # Calendar info
+        import calendar as cal_module
+        cal = cal_module.Calendar(firstweekday=cal_module.MONDAY)
+        month_calendar = cal.monthdayscalendar(year, month)
+
+        # Get daily limits for this month
+        daily_limits_info = {}
+        for week in month_calendar:
+            for day in week:
+                if day != 0:
+                    date_str = f'{year}-{month:02d}-{day:02d}'
+                    limit = get_daily_limit(date_str, 1)
+                    current_count = len(jadwal_per_tanggal.get(date_str, []))
+                    is_full = current_count >= limit
+                    daily_limits_info[date_str] = {
+                        'limit': limit,
+                        'current': current_count,
+                        'is_full': is_full
+                    }
+
+        NAMA_BULAN = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
+                      7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
+
+        return render_template('login.html',
+            year=year,
+            month=month,
+            month_name=NAMA_BULAN[month],
+            month_calendar=month_calendar,
+            jadwal_per_tanggal=jadwal_per_tanggal,
+            all_members=all_members,
+            daily_limits=daily_limits_info
+        )
     
     @app.route('/logout')
     @login_required
