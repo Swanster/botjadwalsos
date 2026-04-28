@@ -58,21 +58,19 @@
                     {% set date_str = '' %}
                     {% set limit_info = {'limit': 1, 'current': 0, 'is_full': false} %}
                     {% set is_full = false %}
-                    {% set can_click = false %}
 
                     {% if day != 0 %}
                         {% set date_str = '%04d-%02d-%02d'|format(year, month, day) %}
                         {% set limit_info = daily_limits.get(date_str, {'limit': 1, 'current': 0, 'is_full': false}) %}
                         {% set is_full = limit_info.is_full %}
-                        {% set can_click = not is_full %}
                     {% endif %}
 
                     <div class="calendar-tile relative group h-24 sm:h-28 md:h-32 lg:h-40 rounded-xl md:rounded-2xl transition-all duration-300 overflow-hidden border-2 active:scale-95
                         {% if day == 0 %} bg-muted/10 border-transparent opacity-20
-                        {% elif is_full %} bg-red-500/10 border-red-500/30 grayscale-[0.3]
+                        {% elif is_full %} bg-red-500/10 border-red-500/30 hover:border-red-500/50 cursor-pointer
                         {% else %} bg-white backdrop-blur-xl border-primary/20 hover:border-primary/60 active:border-primary active:shadow-xl active:shadow-primary/20 cursor-pointer {% endif %}
-                        {% if day != 0 and can_click %} selectable-date {% endif %}"
-                        {% if day != 0 and can_click %} data-date="{{ date_str }}" onclick="openAssignModal(this, '{{ date_str }}')" {% endif %}>
+                        {% if day != 0 %} selectable-date {% endif %}"
+                        {% if day != 0 %} data-date="{{ date_str }}" onclick="openAssignModal(this, '{{ date_str }}')" {% endif %}>
 
                         {% if day != 0 %}
                             <!-- Background Number -->
@@ -129,8 +127,8 @@
     <div class="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in" onclick="closeAssignModal()"></div>
     
     <!-- Modal Content - Bottom Sheet on Mobile -->
-    <div class="absolute inset-x-0 bottom-0 md:inset-auto md:inset-0 flex items-end md:items-center justify-center p-0 md:p-4">
-        <div class="bg-white md:rounded-3xl rounded-t-3xl shadow-2xl shadow-black/50 w-full max-w-md max-h-[85vh] md:max-h-auto overflow-hidden animate-slide-up md:animate-zoom-in-95 border-t-2 md:border-2 border-primary/30">
+    <div class="absolute inset-0 flex items-end md:items-center justify-center p-0 md:p-4 pointer-events-none">
+        <div class="bg-white md:rounded-3xl rounded-t-3xl shadow-2xl shadow-black/50 w-full max-w-md max-h-[85vh] md:max-h-[90vh] overflow-hidden animate-slide-up md:animate-zoom-in-95 border-t-2 md:border-2 border-primary/30 pointer-events-auto flex flex-col">
             <!-- Modal Header -->
             <div class="bg-gradient-to-r from-primary to-orange-500 p-4 md:p-6 text-white">
                 <div class="flex items-center justify-between">
@@ -205,12 +203,34 @@
 // Store jadwal data for modal
 const jadwalData = {{ jadwal_per_tanggal | tojson }};
 const allMembers = {{ all_members | tojson }};
+const dailyLimits = {{ daily_limits | tojson }};
 
 function openAssignModal(cell, dateStr) {
     const modal = document.getElementById('assignModal');
     const modalDate = document.getElementById('modalDate');
     const modalTanggal = document.getElementById('modalTanggal');
     const assignedMembersDiv = document.getElementById('assignedMembers');
+    
+    const limitInfo = dailyLimits[dateStr] || { limit: 1, current: 0, is_full: false };
+    const formEl = document.querySelector('#assignModal form');
+    
+    if (limitInfo.is_full) {
+        formEl.style.display = 'none';
+        if (!document.getElementById('fullNotice')) {
+            const notice = document.createElement('div');
+            notice.id = 'fullNotice';
+            notice.className = 'p-4 mt-2 bg-red-500/10 border border-red-500/30 rounded-xl text-center text-red-600 text-xs md:text-sm font-bold shadow-sm';
+            notice.innerHTML = '⚠️ Kuota penuh. Hapus PIC yang ada untuk mengganti.';
+            formEl.parentNode.appendChild(notice);
+        } else {
+            document.getElementById('fullNotice').style.display = 'block';
+        }
+    } else {
+        formEl.style.display = 'block';
+        if (document.getElementById('fullNotice')) {
+            document.getElementById('fullNotice').style.display = 'none';
+        }
+    }
     
     // Set date with Indonesian locale
     const dateObj = new Date(dateStr + 'T00:00:00');
