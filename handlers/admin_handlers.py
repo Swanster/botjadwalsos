@@ -1,13 +1,18 @@
 # handlers/admin_handlers.py (Versi dengan /statistik)
 
 import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import io
 import csv
 from datetime import date, datetime
 from collections import defaultdict
 
 from config import ADMIN_ID, GROUP_CHAT_ID, ALLOWED_TOPIC_ID
-from core.database import get_bulan_dibuka, buka_bulan_baru, format_tanggal_indonesia, get_jadwal_for_month, tutup_bulan_aktif, get_user_group, get_user_by_telegram_username, set_user_group
+from core.database import (
+    get_bulan_dibuka, buka_bulan_baru, format_tanggal_indonesia, 
+    get_jadwal_for_month, tutup_bulan_aktif, get_user_group, 
+    get_user_by_telegram_username, set_user_group, get_all_months_status
+)
 from core.google_sheets import get_google_sheets_client
 
 NAMA_BULAN = {
@@ -88,20 +93,62 @@ def register_admin_handlers(bot: telebot.TeleBot):
             bot.reply_to(message, "❌ Perintah ini hanya untuk Admin.")
             return
             
+        months = get_all_months_status()
+        
+        # Selalu sertakan bulan sekarang jika belum ada
         today = date.today()
-        tahun, bulan = today.year, today.month
+        if not any(m['tahun'] == today.year and m['bulan'] == today.month for m in months):
+            months.insert(0, {'tahun': today.year, 'bulan': today.month, 'status': 'CURRENT'})
+            
+        if not months:
+            send_statistik_for_month(bot, message.chat.id, today.year, today.month, message.message_thread_id)
+            return
+
+        if len(months) == 1:
+            m = months[0]
+            send_statistik_for_month(bot, message.chat.id, m['tahun'], m['bulan'], message.message_thread_id)
+            return
+
+        # Tampilkan pilihan bulan
+        markup = InlineKeyboardMarkup()
+        for m in months:
+            nama_bulan_full = NAMA_BULAN[m['bulan']]
+            label = f"{nama_bulan_full} {m['tahun']}"
+            if m.get('status') == 'DIBUKA': label += " (OPEN)"
+            markup.add(InlineKeyboardButton(label, callback_data=f"stats_{m['tahun']}_{m['bulan']}"))
         
-        jadwal_bulan_ini = get_jadwal_for_month(tahun, bulan)
+        bot.send_message(message.chat.id, "📊 Pilih bulan untuk melihat statistik:", reply_markup=markup, message_thread_id=message.message_thread_id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('stats_'))
+    def handle_stats_callback(call):
+        if call.from_user.id != ADMIN_ID:
+            bot.answer_callback_query(call.id, "❌ Hanya untuk Admin.", show_alert=True)
+            return
+            
+        parts = call.data.split('_')
+        tahun, bulan = int(parts[1]), int(parts[2])
         
-        if not jadwal_bulan_ini:
-            bot.reply_to(message, f"Belum ada data jadwal untuk bulan {NAMA_BULAN[bulan]} {tahun} untuk ditampilkan.")
+        # Hapus pesan keyboard
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except:
+            pass
+            
+        send_statistik_for_month(bot, call.message.chat.id, tahun, bulan, call.message.message_thread_id)
+        bot.answer_callback_query(call.id)
+
+    def send_statistik_for_month(bot, chat_id, tahun, bulan, thread_id=None):
+        jadwal_bulan = get_jadwal_for_month(tahun, bulan)
+        
+        if not jadwal_bulan:
+            bot.send_message(chat_id, f"Belum ada data jadwal untuk bulan {NAMA_BULAN[bulan]} {tahun} untuk ditampilkan.", message_thread_id=thread_id)
             return
             
         # Proses data untuk statistik
         rekap_user = defaultdict(int)
         rekap_hari = defaultdict(int)
         
-        for jadwal in jadwal_bulan_ini:
+        for jadwal in jadwal_bulan:
             rekap_user[jadwal['username']] += 1
             tgl_obj = datetime.strptime(jadwal['tanggal'], '%Y-%m-%d').date()
             nama_hari = HARI_MAP_ID[tgl_obj.weekday()]
@@ -123,7 +170,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             jumlah = rekap_hari.get(hari, 0)
             pesan += f"{emoji} {hari}: *{jumlah}* kali terisi\n"
 
-        bot.send_message(message.chat.id, pesan, parse_mode='Markdown', message_thread_id=message.message_thread_id)
+        bot.send_message(chat_id, pesan, parse_mode='Markdown', message_thread_id=thread_id)
         
     @bot.message_handler(commands=['upload_grup_csv'])
     def handle_upload_csv(message):

@@ -9,6 +9,13 @@ makassar_tz = pytz.timezone("Asia/Makassar")
 
 from config import DB_NAME
 
+def get_all_months_status():
+    """Mengambil semua bulan yang pernah dibuka/ditutup dari status_bulanan."""
+    with connect_db() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT tahun, bulan, status FROM status_bulanan ORDER BY tahun DESC, bulan DESC")
+        return [dict(row) for row in cur.fetchall()]
+
 def row_to_dict(row):
     """Convert sqlite3.Row to dictionary."""
     if row is None:
