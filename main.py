@@ -13,7 +13,7 @@ from typing import Optional
 # Import spesifik untuk menangani error API Telegram
 from telebot.apihelper import ApiTelegramException, ApiException
 
-from config import API_TOKEN, ADMIN_ID
+from config import API_TOKEN, ADMIN_ID, GROUP_CHAT_ID
 from core.database import create_tables, populate_default_config, init_default_admin
 from core.scheduler import init_scheduler
 
@@ -145,8 +145,12 @@ class BotManager:
         ]
 
         try:
+            self.bot.delete_my_commands(scope=types.BotCommandScopeChat(GROUP_CHAT_ID))
+            self.bot.delete_my_commands(scope=types.BotCommandScopeChatAdministrators(GROUP_CHAT_ID))
+            self.bot.delete_my_commands(scope=types.BotCommandScopeAllChatAdministrators())
             self.bot.set_my_commands(user_commands, scope=types.BotCommandScopeDefault())
             self.bot.set_my_commands(user_commands, scope=types.BotCommandScopeAllGroupChats())
+            self.bot.set_my_commands(user_commands, scope=types.BotCommandScopeChat(GROUP_CHAT_ID))
             self.bot.set_my_commands(user_commands, scope=types.BotCommandScopeAllPrivateChats())
             self.bot.set_my_commands(admin_commands, scope=types.BotCommandScopeChat(ADMIN_ID))
             logging.info("✓ Command menu Telegram dikonfigurasi")
