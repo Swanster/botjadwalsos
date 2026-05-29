@@ -12,7 +12,9 @@ from core.database import (
     get_jadwal_for_specific_date, get_all_absensi_in_range, get_jadwal_by_group,
     get_all_users_in_group, format_tanggal_indonesia,
     get_all_registered_users, get_users_with_schedule_in_range,
-    is_date_full, get_daily_limit, get_assignment_count_for_date
+    is_date_full, get_daily_limit, get_assignment_count_for_date,
+    can_user_take_weekend_date, get_user_jadwal_for_month,
+    get_weekend_monthly_limit_key
 )
 
 # Decorator retry_on_failure (TETAP SAMA)
@@ -331,6 +333,96 @@ def kirim_peringatan_jadwal_mingguan_kosong(bot):
     print("Scheduler: Peringatan mingguan (mention) berhasil dikirim.")
 
 
+@retry_on_failure(retries=3, delay=60)
+def kirim_peringatan_slot_weekend_kosong(bot):
+    """
+    Mention anggota yang masih bisa mengisi slot Sabtu/Minggu minggu depan.
+    """
+    print("Scheduler: Mengecek slot weekend kosong untuk minggu depan...")
+    tz = pytz.timezone("Asia/Makassar")
+    today = datetime.now(tz).date()
+
+    next_week_start = today + timedelta(days=(7 - today.weekday()))
+    weekend_dates = [next_week_start + timedelta(days=5), next_week_start + timedelta(days=6)]
+    all_users = get_all_registered_users()
+
+    def format_mention(user):
+        if user['telegram_username']:
+            return f"@{user['telegram_username']}"
+        return f"[pengguna](tg://user?id={user['user_id']})"
+
+    def get_candidate_priority(user_id, target_date):
+        jadwal_bulan = get_user_jadwal_for_month(user_id, target_date.year, target_date.month)
+        total_jadwal = len(jadwal_bulan)
+        total_weekend = 0
+        for jadwal in jadwal_bulan:
+            if get_weekend_monthly_limit_key(jadwal['tanggal']):
+                total_weekend += 1
+        return total_weekend, total_jadwal
+
+    pesan_sections = []
+    for target_date in weekend_dates:
+        target_date_str = target_date.strftime('%Y-%m-%d')
+        total_terisi = get_assignment_count_for_date(target_date_str)
+        max_per_hari = get_daily_limit(target_date_str, 1)
+
+        if total_terisi >= max_per_hari:
+            continue
+
+        slot_tersedia = max_per_hari - total_terisi
+        petugas_hari_ini = get_jadwal_for_specific_date(target_date_str)
+        user_sudah_isi_hari_ini = {petugas['user_id'] for petugas in petugas_hari_ini}
+
+        candidates = []
+        for user in all_users:
+            if user['user_id'] in user_sudah_isi_hari_ini:
+                continue
+            if not can_user_take_weekend_date(user['user_id'], target_date_str):
+                continue
+            priority = get_candidate_priority(user['user_id'], target_date)
+            candidates.append((priority, format_mention(user)))
+
+        if candidates:
+            candidates.sort(key=lambda item: (item[0][0], item[0][1], item[1].lower()))
+            suggested_limit = max(slot_tersedia, 1)
+            suggested_mentions = [mention for _, mention in candidates[:suggested_limit]]
+            backup_mentions = [mention for _, mention in candidates[suggested_limit:suggested_limit + 3]]
+
+            backup_text = ""
+            if backup_mentions:
+                backup_text = f"\nBackup eligible: {' '.join(backup_mentions)}"
+
+            pesan_sections.append(
+                f"*{format_tanggal_indonesia(target_date)}* masih kurang *{slot_tersedia} slot*.\n"
+                f"Disarankan input: {' '.join(suggested_mentions)}"
+                f"{backup_text}"
+            )
+        else:
+            pesan_sections.append(
+                f"*{format_tanggal_indonesia(target_date)}* masih kurang *{slot_tersedia} slot*, "
+                f"tetapi tidak ada user yang masih eligible berdasarkan batas 1 Sabtu/1 Minggu per bulan."
+            )
+
+    if not pesan_sections:
+        print("Scheduler: Slot weekend minggu depan sudah penuh. Peringatan dilewati.")
+        return
+
+    pesan = (
+        "🔔 *Peringatan Slot Weekend Kosong*\n\n"
+        f"Weekend minggu depan masih ada slot kosong:\n\n"
+        + "\n\n".join(pesan_sections)
+        + "\n\nSilakan gunakan perintah `/start` untuk mengisi."
+    )
+
+    bot.send_message(
+        chat_id=GROUP_CHAT_ID,
+        text=pesan,
+        parse_mode='Markdown',
+        message_thread_id=ALLOWED_TOPIC_ID
+    )
+    print("Scheduler: Peringatan slot weekend kosong berhasil dikirim.")
+
+
 # --- FITUR BARU 2: Peringatan H-3 Slot Kosong ---
 @retry_on_failure(retries=3, delay=60)
 def kirim_peringatan_h_minus_3(bot):
@@ -404,7 +496,13 @@ def init_scheduler(bot):
         day_of_week='fri', hour=16, minute=0, id='weekly_unfilled_warning', replace_existing=True
     )
 
-    # Job 4 (BARU): Peringatan H-3 slot kosong - Setiap hari jam 08:00
+    # Job 4: Peringatan slot weekend kosong - Setiap Jumat jam 16:05
+    scheduler.add_job(
+        lambda: kirim_peringatan_slot_weekend_kosong(bot), trigger='cron',
+        day_of_week='fri', hour=16, minute=5, id='weekly_weekend_slot_warning', replace_existing=True
+    )
+
+    # Job 5 (BARU): Peringatan H-3 slot kosong - Setiap hari jam 08:00
     scheduler.add_job(
         lambda: kirim_peringatan_h_minus_3(bot), trigger='cron',
         hour=8, minute=0, id='daily_h3_warning', replace_existing=True

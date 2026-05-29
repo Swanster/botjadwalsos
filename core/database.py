@@ -194,24 +194,49 @@ def update_user_jadwal_for_month(user_id, first_name, telegram_username, list_of
         try:
             cur = conn.cursor()
             cur.execute("BEGIN TRANSACTION;")
+            is_valid, error_message = validate_weekend_monthly_limits(list_of_tanggal)
+            if not is_valid:
+                raise ValueError(error_message)
             cur.execute("DELETE FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?", (user_id, start_of_month, end_of_month))
             if list_of_tanggal:
                 data_to_insert = [(user_id, first_name, telegram_username, tgl) for tgl in list_of_tanggal]
                 cur.executemany("INSERT INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)", data_to_insert)
             conn.commit()
+            return True
         except Exception as e:
             conn.rollback(); print(f"ERROR saat update_user_jadwal_for_month: {e}")
+            return False
 
 def get_bulan_dibuka():
     with connect_db() as conn:
         cur = conn.cursor()
-        cur.execute("SELECT * FROM status_bulanan WHERE status = 'DIBUKA'")
+        cur.execute("SELECT * FROM status_bulanan WHERE status = 'DIBUKA' ORDER BY tahun ASC, bulan ASC LIMIT 1")
         return cur.fetchone()
 
-def buka_bulan_baru(tahun, bulan):
+def get_bulan_dibuka_list():
+    with connect_db() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM status_bulanan WHERE status = 'DIBUKA' ORDER BY tahun ASC, bulan ASC")
+        return [row_to_dict(row) for row in cur.fetchall()]
+
+def buka_bulan_baru(tahun, bulan, max_open_months=2):
     try:
         with connect_db() as conn:
             cur = conn.cursor()
+            cur.execute("SELECT status FROM status_bulanan WHERE tahun = ? AND bulan = ?", (tahun, bulan))
+            existing = cur.fetchone()
+            if existing and existing['status'] == 'DIBUKA':
+                return None
+
+            cur.execute("SELECT COUNT(*) as total FROM status_bulanan WHERE status = 'DIBUKA'")
+            if cur.fetchone()['total'] >= max_open_months:
+                return 'MAX_OPEN'
+
+            if existing and existing['status'] == 'DITUTUP':
+                cur.execute("UPDATE status_bulanan SET status = 'DIBUKA' WHERE tahun = ? AND bulan = ?", (tahun, bulan))
+                conn.commit()
+                return cur.rowcount
+
             cur.execute("INSERT INTO status_bulanan (tahun, bulan, status) VALUES (?, ?, 'DIBUKA')", (tahun, bulan))
             conn.commit()
             return cur.lastrowid
@@ -318,6 +343,31 @@ def execute_swap(request_id):
             user_b_details = cur.execute("SELECT username, telegram_username FROM user_groups WHERE user_id = ?", (req['user_b_id'],)).fetchone()
             user_a_details = cur.execute("SELECT username, telegram_username FROM user_groups WHERE user_id = ?", (req['user_a_id'],)).fetchone()
             if not user_a_details or not user_b_details: raise sqlite3.OperationalError("User details not found in user_groups.")
+
+            affected_months = {
+                (datetime.strptime(req['tanggal_a'], '%Y-%m-%d').year, datetime.strptime(req['tanggal_a'], '%Y-%m-%d').month),
+                (datetime.strptime(req['tanggal_b'], '%Y-%m-%d').year, datetime.strptime(req['tanggal_b'], '%Y-%m-%d').month),
+            }
+
+            def get_dates_after_swap(user_id, tanggal_keluar, tanggal_masuk):
+                tanggal_list = []
+                for tahun, bulan in affected_months:
+                    start_date = f"{tahun}-{bulan:02d}-01"
+                    end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
+                    cur.execute(
+                        "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
+                        (user_id, start_date, end_date)
+                    )
+                    tanggal_list.extend(row['tanggal'] for row in cur.fetchall())
+                return [tanggal_masuk if tanggal == tanggal_keluar else tanggal for tanggal in tanggal_list]
+
+            user_a_tanggal = get_dates_after_swap(req['user_a_id'], req['tanggal_a'], req['tanggal_b'])
+            user_b_tanggal = get_dates_after_swap(req['user_b_id'], req['tanggal_b'], req['tanggal_a'])
+            user_a_valid, user_a_error = validate_weekend_monthly_limits(user_a_tanggal)
+            user_b_valid, user_b_error = validate_weekend_monthly_limits(user_b_tanggal)
+            if not user_a_valid or not user_b_valid:
+                raise ValueError(user_a_error or user_b_error)
+
             # Swap hanya user_id, username otomatis dari JOIN
             cur.execute("UPDATE jadwal SET user_id = ?, username = ?, telegram_username = ? WHERE tanggal = ? AND user_id = ?", (req['user_b_id'], user_b_details['username'], user_b_details['telegram_username'], req['tanggal_a'], req['user_a_id']))
             cur.execute("UPDATE jadwal SET user_id = ?, username = ?, telegram_username = ? WHERE tanggal = ? AND user_id = ?", (req['user_a_id'], user_a_details['username'], user_a_details['telegram_username'], req['tanggal_b'], req['user_b_id']))
@@ -537,6 +587,8 @@ def add_jadwal_manual(user_id, username, telegram_username, tanggal):
     try:
         with connect_db() as conn:
             cur = conn.cursor()
+            if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):
+                return False
             cur.execute(
                 "INSERT OR REPLACE INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)",
                 (user_id, username, telegram_username, tanggal)
@@ -607,6 +659,51 @@ def is_date_full(tanggal, default_limit=1):
     limit = get_daily_limit(tanggal, default_limit)
     current_count = get_assignment_count_for_date(tanggal)
     return current_count >= limit
+
+def get_weekend_monthly_limit_key(tanggal):
+    """Return (year, month, weekday) untuk Sabtu/Minggu, atau None untuk weekday."""
+    tanggal_obj = datetime.strptime(tanggal, '%Y-%m-%d').date()
+    if tanggal_obj.weekday() not in (5, 6):
+        return None
+    return tanggal_obj.year, tanggal_obj.month, tanggal_obj.weekday()
+
+def validate_weekend_monthly_limits(list_of_tanggal, limit=1):
+    """Pastikan tiap user hanya punya 1 Sabtu dan 1 Minggu per bulan."""
+    counts = {}
+    for tanggal in list_of_tanggal:
+        key = get_weekend_monthly_limit_key(tanggal)
+        if not key:
+            continue
+        counts[key] = counts.get(key, 0) + 1
+        if counts[key] > limit:
+            nama_hari = 'Sabtu' if key[2] == 5 else 'Minggu'
+            return False, f"Maksimal {limit} {nama_hari} per bulan."
+    return True, None
+
+def can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=None, limit=1):
+    """Cek apakah user masih boleh mengambil tanggal weekend ini pada bulan terkait."""
+    key = get_weekend_monthly_limit_key(tanggal)
+    if not key:
+        return True
+
+    tahun, bulan, weekday = key
+    start_date = f"{tahun}-{bulan:02d}-01"
+    end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
+    with connect_db() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
+            (user_id, start_date, end_date)
+        )
+        weekend_count = 0
+        for row in cur.fetchall():
+            existing_tanggal = row['tanggal']
+            if exclude_tanggal and existing_tanggal == exclude_tanggal:
+                continue
+            existing_key = get_weekend_monthly_limit_key(existing_tanggal)
+            if existing_key == key:
+                weekend_count += 1
+        return weekend_count < limit
 
 def add_audit_log(username, action, description):
     """Menambahkan catatan aktivitas ke tabel audit_logs."""

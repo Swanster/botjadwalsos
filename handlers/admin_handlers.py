@@ -9,7 +9,7 @@ from collections import defaultdict
 
 from config import ADMIN_ID, GROUP_CHAT_ID, ALLOWED_TOPIC_ID
 from core.database import (
-    get_bulan_dibuka, buka_bulan_baru, format_tanggal_indonesia, 
+    get_bulan_dibuka, get_bulan_dibuka_list, buka_bulan_baru, format_tanggal_indonesia, 
     get_jadwal_for_month, tutup_bulan_aktif, get_user_group, 
     get_user_by_telegram_username, set_user_group, get_all_months_status
 )
@@ -23,18 +23,20 @@ HARI_MAP_ID = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'S
 EMOJI_HARI = {'Senin':'🌞','Selasa':'📘','Rabu':'📗','Kamis':'📙','Jumat':'📕','Sabtu':'🎉','Minggu':'🛌'}
 
 def register_admin_handlers(bot: telebot.TeleBot):
+
+    def admin_only_private(message):
+        if message.from_user.id != ADMIN_ID:
+            if message.chat.type == 'private':
+                bot.reply_to(message, "❌ Perintah ini hanya untuk Admin.")
+            return False
+        if message.chat.type != 'private':
+            return False
+        return True
     
     @bot.message_handler(commands=['buka_jadwal_bulan'])
     def handle_buka_jadwal_bulan(message):
         # ... (fungsi ini tidak berubah)
-        if message.from_user.id != ADMIN_ID:
-            bot.reply_to(message, "❌ Perintah ini hanya untuk Admin.")
-            return
-
-        bulan_terbuka = get_bulan_dibuka()
-        if bulan_terbuka:
-            bot.reply_to(message, 
-                f"⚠️ Gagal. Masih ada jadwal untuk bulan {NAMA_BULAN[bulan_terbuka['bulan']]} {bulan_terbuka['tahun']} yang sedang dibuka.")
+        if not admin_only_private(message):
             return
 
         parts = message.text.split()
@@ -50,6 +52,11 @@ def register_admin_handlers(bot: telebot.TeleBot):
             return
 
         id_bulan_baru = buka_bulan_baru(tahun, bulan)
+        if id_bulan_baru == 'MAX_OPEN':
+            bulan_terbuka = get_bulan_dibuka_list()
+            daftar_bulan = ', '.join(f"{NAMA_BULAN[b['bulan']]} {b['tahun']}" for b in bulan_terbuka)
+            bot.reply_to(message, f"⚠️ Maksimal 2 bulan jadwal bisa dibuka bersamaan.\nSaat ini terbuka: {daftar_bulan}.\nTutup salah satu dulu dengan `/tutup_jadwal_bulan <bulan> <tahun>`.", parse_mode='Markdown')
+            return
         if id_bulan_baru is None:
             bot.reply_to(message, f"❌ Gagal. Jadwal untuk bulan {NAMA_BULAN[bulan]} {tahun} sepertinya sudah ada di database.")
             return
@@ -65,16 +72,28 @@ def register_admin_handlers(bot: telebot.TeleBot):
     # --- PERINTAH BARU UNTUK MENUTUP JADWAL ---
     @bot.message_handler(commands=['tutup_jadwal_bulan'])
     def handle_tutup_jadwal_bulan(message):
-        if message.from_user.id != ADMIN_ID:
-            bot.reply_to(message, "❌ Perintah ini hanya untuk Admin.")
+        if not admin_only_private(message):
             return
         
-        bulan_terbuka = get_bulan_dibuka()
-        if not bulan_terbuka:
+        bulan_terbuka_list = get_bulan_dibuka_list()
+        if not bulan_terbuka_list:
             bot.reply_to(message, "Tidak ada jadwal bulan yang sedang dibuka saat ini.")
             return
-            
-        tahun, bulan = bulan_terbuka['tahun'], bulan_terbuka['bulan']
+
+        parts = message.text.split()
+        if len(parts) == 3:
+            try:
+                bulan = int(parts[1]); tahun = int(parts[2])
+                if not (1 <= bulan <= 12 and tahun > 2020): raise ValueError("Bulan atau tahun tidak valid.")
+            except (ValueError, IndexError):
+                bot.reply_to(message, "Format salah.\nGunakan: `/tutup_jadwal_bulan <bulan> <tahun>`", parse_mode='Markdown')
+                return
+        elif len(bulan_terbuka_list) == 1:
+            tahun, bulan = bulan_terbuka_list[0]['tahun'], bulan_terbuka_list[0]['bulan']
+        else:
+            daftar_bulan = '\n'.join(f"- {NAMA_BULAN[b['bulan']]} {b['tahun']}" for b in bulan_terbuka_list)
+            bot.reply_to(message, f"Ada lebih dari 1 bulan yang terbuka:\n{daftar_bulan}\n\nGunakan: `/tutup_jadwal_bulan <bulan> <tahun>`", parse_mode='Markdown')
+            return
         
         # Panggil fungsi database untuk menutup bulan
         baris_diubah = tutup_bulan_aktif(tahun, bulan)
@@ -89,8 +108,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
     # --- FUNGSI BARU: /statistik ---
     @bot.message_handler(commands=['statistik'])
     def handle_statistik(message):
-        if message.from_user.id != ADMIN_ID:
-            bot.reply_to(message, "❌ Perintah ini hanya untuk Admin.")
+        if not admin_only_private(message):
             return
             
         months = get_all_months_status()
@@ -99,6 +117,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         today = date.today()
         if not any(m['tahun'] == today.year and m['bulan'] == today.month for m in months):
             months.insert(0, {'tahun': today.year, 'bulan': today.month, 'status': 'CURRENT'})
+        months = months[:2]
             
         if not months:
             send_statistik_for_month(bot, message.chat.id, today.year, today.month, message.message_thread_id)
@@ -174,8 +193,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         
     @bot.message_handler(commands=['upload_grup_csv'])
     def handle_upload_csv(message):
-        if message.from_user.id != ADMIN_ID:
-            bot.reply_to(message, "❌ Perintah ini hanya untuk Admin.")
+        if not admin_only_private(message):
             return
         
         # Minta admin untuk mengirim file
@@ -185,6 +203,9 @@ def register_admin_handlers(bot: telebot.TeleBot):
         bot.register_next_step_handler(msg, process_csv_file)
 
     def process_csv_file(message):
+        if not admin_only_private(message):
+            return
+
         # Cek apakah pesan berisi dokumen dan tipenya adalah csv
         if not message.document or not message.document.file_name.endswith('.csv'):
             bot.reply_to(message, "❌ File tidak valid. Harap kirim file dengan ekstensi `.csv`.")
@@ -236,8 +257,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
     @bot.message_handler(commands=['export'])
     def handle_export(message):
         """Command untuk manual sync data ke Google Sheets."""
-        if message.from_user.id != ADMIN_ID:
-            bot.reply_to(message, "❌ Perintah ini hanya untuk Admin.")
+        if not admin_only_private(message):
             return
 
         client = get_google_sheets_client()

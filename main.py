@@ -1,6 +1,7 @@
 # main.py (Enhanced Version - Anti Gangguan Koneksi)
 
 import telebot
+from telebot import types
 import time
 import requests
 import sys
@@ -12,7 +13,7 @@ from typing import Optional
 # Import spesifik untuk menangani error API Telegram
 from telebot.apihelper import ApiTelegramException, ApiException
 
-from config import API_TOKEN
+from config import API_TOKEN, ADMIN_ID
 from core.database import create_tables, populate_default_config, init_default_admin
 from core.scheduler import init_scheduler
 
@@ -95,6 +96,8 @@ class BotManager:
                 threaded=True,
                 num_threads=2
             )
+
+            self.configure_bot_commands()
             
             # Daftarkan semua handler
             register_admin_handlers(self.bot)
@@ -117,6 +120,38 @@ class BotManager:
         except Exception as e:
             logging.error(f"Error saat inisialisasi bot: {e}", exc_info=True)
             return False
+
+    def configure_bot_commands(self):
+        """Atur command menu Telegram: grup hanya user command, admin command hanya private admin."""
+        user_commands = [
+            types.BotCommand("menu", "Membuka tombol menu bot"),
+            types.BotCommand("start", "Mengisi atau mengedit jadwal standby"),
+            types.BotCommand("lihat_jadwal", "Melihat rekap jadwal tim"),
+            types.BotCommand("jadwal_saya", "Melihat jadwal standby pribadi"),
+            types.BotCommand("cuti", "Menandai tanggal tidak tersedia"),
+            types.BotCommand("lihat_cuti", "Melihat daftar cuti tim"),
+            types.BotCommand("tukar_jadwal", "Mengajukan pertukaran jadwal"),
+            types.BotCommand("batal_jadwal", "Membatalkan jadwal standby"),
+            types.BotCommand("batal_cuti", "Membatalkan data cuti"),
+            types.BotCommand("guide", "Panduan penggunaan bot"),
+            types.BotCommand("panduan", "Panduan penggunaan bot"),
+        ]
+        admin_commands = user_commands + [
+            types.BotCommand("upload_grup_csv", "Upload data pengguna via CSV"),
+            types.BotCommand("buka_jadwal_bulan", "Membuka periode jadwal"),
+            types.BotCommand("tutup_jadwal_bulan", "Menutup periode jadwal"),
+            types.BotCommand("statistik", "Melihat statistik jadwal"),
+            types.BotCommand("export", "Sync manual ke Google Sheets"),
+        ]
+
+        try:
+            self.bot.set_my_commands(user_commands, scope=types.BotCommandScopeDefault())
+            self.bot.set_my_commands(user_commands, scope=types.BotCommandScopeAllGroupChats())
+            self.bot.set_my_commands(user_commands, scope=types.BotCommandScopeAllPrivateChats())
+            self.bot.set_my_commands(admin_commands, scope=types.BotCommandScopeChat(ADMIN_ID))
+            logging.info("✓ Command menu Telegram dikonfigurasi")
+        except Exception as e:
+            logging.warning(f"Gagal mengatur command menu Telegram: {e}")
     
     def cleanup(self):
         """Cleanup resources sebelum restart/shutdown"""

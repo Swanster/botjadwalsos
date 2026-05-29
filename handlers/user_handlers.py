@@ -9,16 +9,14 @@ import calendar
 import pytz
 import time
 
-from typing import Optional
-
 from config import ALLOWED_TOPIC_ID
 from core.database import (
-    get_bulan_dibuka, get_konfigurasi, get_jadwal_for_month,
+    get_bulan_dibuka, get_bulan_dibuka_list, get_konfigurasi, get_jadwal_for_month,
     get_user_absensi_in_range, set_user_absensi, update_user_jadwal_for_month,
     format_tanggal_indonesia, get_user_jadwal_for_month, get_jadwal_for_specific_date,
     get_user_group, get_jadwal_by_group, get_all_users_in_group, get_all_absensi_in_range,
     delete_user_jadwal_on_dates, get_setting,
-    is_date_full, get_daily_limit
+    is_date_full, get_daily_limit, get_weekend_monthly_limit_key, validate_weekend_monthly_limits
 )
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets
 
@@ -48,12 +46,24 @@ def get_hari_from_date(date_str: str) -> str:
     date_obj = datetime.strptime(date_str, '%Y-%m-%d')
     return HARI_MAP_ID[date_obj.weekday()]
 
-# --- LOGIKA ATURAN WEEKEND (DARI KODE ANDA) ---
-def get_pasangan_weekend(cek_tanggal: date) -> Optional[date]:
-    weekday = cek_tanggal.weekday()
-    if weekday == 5: return cek_tanggal + timedelta(days=1)
-    if weekday == 6: return cek_tanggal - timedelta(days=1)
-    return None
+def get_weekend_limit_message(tanggal_str: str) -> str:
+    weekend_key = get_weekend_monthly_limit_key(tanggal_str)
+    if not weekend_key:
+        return "❌ Batas weekend bulanan tercapai."
+    nama_hari = HARI_MAP_ID[weekend_key[2]]
+    return f"❌ Hanya bisa pilih 1 {nama_hari} setiap bulan."
+
+def is_weekend_monthly_locked(tanggal_str: str, pilihan_sementara) -> bool:
+    weekend_key = get_weekend_monthly_limit_key(tanggal_str)
+    if not weekend_key or tanggal_str in pilihan_sementara:
+        return False
+    for pilihan in pilihan_sementara:
+        if get_weekend_monthly_limit_key(pilihan) == weekend_key:
+            return True
+    return False
+
+def create_reason_button(label: str, reason: str, tanggal_str: str) -> InlineKeyboardButton:
+    return InlineKeyboardButton(label, callback_data=f"reason_{reason}_{tanggal_str}")
 
 def create_calendar(mode, user_id, year, month):
     markup = InlineKeyboardMarkup()
@@ -135,7 +145,7 @@ def create_calendar(mode, user_id, year, month):
             else:
                 if mode == 'jadwal':
                     if current_date_str in absensi_user:
-                        row_buttons.append(InlineKeyboardButton("⛔️", callback_data='ignore')); continue
+                        row_buttons.append(create_reason_button("⛔️", "absen", current_date_str)); continue
                     
                     # Cek batasan harian (prioritas utama)
                     max_per_hari = get_daily_limit(current_date_str, 1)  # Default 1 jika tidak ada setting
@@ -147,14 +157,11 @@ def create_calendar(mode, user_id, year, month):
                         jumlah_terisi = slot_terisi_apps.get(current_date_str, 0)
                     
                     is_penuh = jumlah_terisi >= max_per_hari
-                    is_weekend_terkunci = False
-                    pasangan_weekend = get_pasangan_weekend(current_date_obj)
-                    if pasangan_weekend and pasangan_weekend.strftime('%Y-%m-%d') in pilihan_sementara:
-                        is_weekend_terkunci = True
+                    is_weekend_terkunci = is_weekend_monthly_locked(current_date_str, pilihan_sementara)
 
                     if current_date_str in pilihan_sementara: label = f"✅{label}"
-                    elif is_penuh: row_buttons.append(InlineKeyboardButton("❌", callback_data='ignore')); continue
-                    elif is_weekend_terkunci: row_buttons.append(InlineKeyboardButton("-", callback_data='ignore')); continue
+                    elif is_penuh: row_buttons.append(create_reason_button("❌", "full", current_date_str)); continue
+                    elif is_weekend_terkunci: row_buttons.append(create_reason_button("-", "weekend", current_date_str)); continue
                 
                 elif mode == 'cuti' and current_date_str in pilihan_sementara:
                     label = f"✅{label}"
@@ -194,21 +201,61 @@ def generate_rekap_text(tahun, bulan):
 
 def register_user_handlers(bot: telebot.TeleBot):
 
-    @bot.message_handler(commands=['start'])
-    def handle_start(message):
-        if not is_allowed(message): return
-        bulan_terbuka = get_bulan_dibuka()
-        if not bulan_terbuka:
-            bot.reply_to(message, "Saat ini tidak ada periode jadwal yang sedang dibuka untuk diisi.", message_thread_id=message.message_thread_id)
-            return
+    def send_main_menu(chat_id, thread_id=None):
+        markup = InlineKeyboardMarkup()
+        markup.row(
+            InlineKeyboardButton("Isi Jadwal", callback_data="menu_start"),
+            InlineKeyboardButton("Jadwal Saya", callback_data="menu_jadwal_saya")
+        )
+        markup.row(
+            InlineKeyboardButton("Lihat Jadwal", callback_data="menu_lihat_jadwal"),
+            InlineKeyboardButton("Cuti", callback_data="menu_cuti")
+        )
+        markup.row(
+            InlineKeyboardButton("Lihat Cuti", callback_data="menu_lihat_cuti"),
+            InlineKeyboardButton("Tukar Jadwal", callback_data="menu_tukar_jadwal")
+        )
+        markup.row(
+            InlineKeyboardButton("Batal Jadwal", callback_data="menu_batal_jadwal"),
+            InlineKeyboardButton("Batal Cuti", callback_data="menu_batal_cuti")
+        )
+        markup.row(InlineKeyboardButton("Panduan", callback_data="menu_panduan"))
+        bot.send_message(chat_id, "Silakan pilih menu:", reply_markup=markup, message_thread_id=thread_id)
 
-        user_id = message.from_user.id
+    def show_open_month_choices(chat_id, thread_id=None):
+        bulan_terbuka_list = get_bulan_dibuka_list()
+        if not bulan_terbuka_list:
+            bot.send_message(chat_id, "Saat ini tidak ada periode jadwal yang sedang dibuka untuk diisi.", message_thread_id=thread_id)
+            return False
+        if len(bulan_terbuka_list) == 1:
+            return bulan_terbuka_list[0]
+
+        markup = InlineKeyboardMarkup()
+        for bulan_terbuka in bulan_terbuka_list:
+            label = f"{NAMA_BULAN[bulan_terbuka['bulan']]} {bulan_terbuka['tahun']}"
+            callback_data = f"openmonth_{bulan_terbuka['tahun']}_{bulan_terbuka['bulan']}"
+            markup.add(InlineKeyboardButton(label, callback_data=callback_data))
+        bot.send_message(chat_id, "Pilih bulan jadwal yang ingin diisi:", reply_markup=markup, message_thread_id=thread_id)
+        return None
+
+    def start_jadwal_flow(chat_id, user, thread_id=None, tahun=None, bulan=None):
+        if tahun is None or bulan is None:
+            bulan_terbuka = show_open_month_choices(chat_id, thread_id)
+            if not bulan_terbuka:
+                return
+            tahun, bulan = bulan_terbuka['tahun'], bulan_terbuka['bulan']
+        else:
+            bulan_terbuka_list = get_bulan_dibuka_list()
+            if not any(b['tahun'] == tahun and b['bulan'] == bulan for b in bulan_terbuka_list):
+                bot.send_message(chat_id, f"Jadwal untuk {NAMA_BULAN[bulan]} {tahun} tidak sedang dibuka.", message_thread_id=thread_id)
+                return
+
+        user_id = user.id
         user_group = get_user_group(user_id)
         if not user_group:
-            bot.reply_to(message, "❌ Akun Anda belum terdaftar di grup manapun (INFRA/CE/APPS). Silakan hubungi Admin untuk didaftarkan.", message_thread_id=message.message_thread_id)
+            bot.send_message(chat_id, "❌ Akun Anda belum terdaftar di grup manapun (INFRA/CE/APPS). Silakan hubungi Admin untuk didaftarkan.", message_thread_id=thread_id)
             return
 
-        tahun, bulan = bulan_terbuka['tahun'], bulan_terbuka['bulan']
         jadwal_bulan_ini = get_jadwal_for_month(tahun, bulan)
         user_jadwal_lama = {row['tanggal'] for row in jadwal_bulan_ini if row['user_id'] == user_id}
         user_selections[user_id] = {
@@ -218,48 +265,42 @@ def register_user_handlers(bot: telebot.TeleBot):
         
         markup = create_calendar('jadwal', user_id, tahun, bulan)
 
-        bot.send_message(message.chat.id, "Silakan pilih tanggal standby Anda untuk bulan ini.", reply_markup=markup, message_thread_id=message.message_thread_id)
+        bot.send_message(chat_id, "Silakan pilih tanggal standby Anda untuk bulan ini.", reply_markup=markup, message_thread_id=thread_id)
 
-    @bot.message_handler(commands=['jadwal_saya'])
-    def handle_jadwal_saya(message):
-        if not is_allowed(message): return
-        user_id = message.from_user.id
+    def send_jadwal_saya(chat_id, user, thread_id=None):
+        user_id = user.id
         bulan_aktif = get_bulan_dibuka()
         if bulan_aktif: tahun, bulan = bulan_aktif['tahun'], bulan_aktif['bulan']
         else:
             today = date.today(); tahun, bulan = today.year, today.month
         jadwal_user = get_user_jadwal_for_month(user_id, tahun, bulan)
         if not jadwal_user:
-            bot.reply_to(message, f"Anda tidak memiliki jadwal standby di bulan {NAMA_BULAN[bulan]} {tahun}.", message_thread_id=message.message_thread_id)
+            bot.send_message(chat_id, f"Anda tidak memiliki jadwal standby di bulan {NAMA_BULAN[bulan]} {tahun}.", message_thread_id=thread_id)
             return
         pesan = f"📜 *Jadwal Standby Anda*\n_Bulan: {NAMA_BULAN[bulan]} {tahun}_\n\n"
         for jadwal in jadwal_user:
             tgl_obj = datetime.strptime(jadwal['tanggal'], '%Y-%m-%d').date()
             nama_hari = HARI_MAP_ID[tgl_obj.weekday()]
             pesan += f"- *{nama_hari}*, {format_tanggal_indonesia(tgl_obj)}\n"
-        bot.send_message(message.chat.id, pesan, parse_mode='Markdown', message_thread_id=message.message_thread_id)
+        bot.send_message(chat_id, pesan, parse_mode='Markdown', message_thread_id=thread_id)
 
-    @bot.message_handler(commands=['lihat_jadwal'])
-    def handle_lihat_jadwal(message):
-        if not is_allowed(message): return
+    def send_lihat_jadwal(chat_id, thread_id=None):
         bulan_dibuka = get_bulan_dibuka()
         today = date.today()
         if bulan_dibuka and (bulan_dibuka['tahun'] != today.year or bulan_dibuka['bulan'] != today.month):
             markup = InlineKeyboardMarkup()
             markup.add(InlineKeyboardButton(f"🗓️ Lihat Jadwal Bulan Ini ({NAMA_BULAN[today.month]})", callback_data=f"view_rekap_{today.year}_{today.month}"))
             markup.add(InlineKeyboardButton(f"✏️ Lihat Jadwal Dibuka ({NAMA_BULAN[bulan_dibuka['bulan']]})", callback_data=f"view_rekap_{bulan_dibuka['tahun']}_{bulan_dibuka['bulan']}"))
-            bot.send_message(message.chat.id, "Silakan pilih rekap jadwal yang ingin Anda lihat:", reply_markup=markup, message_thread_id=message.message_thread_id)
+            bot.send_message(chat_id, "Silakan pilih rekap jadwal yang ingin Anda lihat:", reply_markup=markup, message_thread_id=thread_id)
         else:
             target_tahun, target_bulan = (bulan_dibuka['tahun'], bulan_dibuka['bulan']) if bulan_dibuka else (today.year, today.month)
             rekap_text = generate_rekap_text(target_tahun, target_bulan)
             markup = InlineKeyboardMarkup()
             markup.row(InlineKeyboardButton("🗓️ Hari Ini", callback_data="view_today"), InlineKeyboardButton("📅 Minggu Ini", callback_data="view_week"))
-            bot.send_message(message.chat.id, rekap_text, parse_mode='Markdown', message_thread_id=message.message_thread_id, reply_markup=markup)
+            bot.send_message(chat_id, rekap_text, parse_mode='Markdown', message_thread_id=thread_id, reply_markup=markup)
 
-    @bot.message_handler(commands=['cuti'])
-    def handle_cuti(message):
-        if not is_allowed(message): return
-        today = date.today(); user_id = message.from_user.id
+    def start_cuti_flow(chat_id, user, thread_id=None):
+        today = date.today(); user_id = user.id
         start_of_month = f"{today.year}-{today.month:02d}-01"; end_of_month = f"{today.year}-{today.month:02d}-{calendar.monthrange(today.year, today.month)[1]}"
         absensi_tersimpan = get_user_absensi_in_range(user_id, start_of_month, end_of_month)
         
@@ -270,17 +311,12 @@ def register_user_handlers(bot: telebot.TeleBot):
         }
         
         markup = create_calendar('cuti', user_id, today.year, today.month)
-        bot.send_message(message.chat.id, "Silakan pilih tanggal di mana Anda tidak tersedia.", reply_markup=markup, message_thread_id=message.message_thread_id)
-        
-    @bot.message_handler(commands=['lihat_cuti'])
-    def handle_lihat_cuti(message):
-        """Menampilkan daftar pengguna yang sedang cuti di bulan yang sedang dibuka."""
-        if not is_allowed(message):
-            return
+        bot.send_message(chat_id, "Silakan pilih tanggal di mana Anda tidak tersedia.", reply_markup=markup, message_thread_id=thread_id)
 
+    def send_lihat_cuti(chat_id, thread_id=None):
         bulan_terbuka = get_bulan_dibuka()
         if not bulan_terbuka:
-            bot.reply_to(message, "Saat ini tidak ada periode jadwal yang sedang dibuka.", message_thread_id=message.message_thread_id)
+            bot.send_message(chat_id, "Saat ini tidak ada periode jadwal yang sedang dibuka.", message_thread_id=thread_id)
             return
 
         tahun, bulan = bulan_terbuka['tahun'], bulan_terbuka['bulan']
@@ -291,7 +327,7 @@ def register_user_handlers(bot: telebot.TeleBot):
 
         if not data_absensi:
             pesan = f"🥳 Tidak ada data cuti yang tercatat untuk bulan *{NAMA_BULAN[bulan]} {tahun}*."
-            bot.reply_to(message, pesan, parse_mode='Markdown', message_thread_id=message.message_thread_id)
+            bot.send_message(chat_id, pesan, parse_mode='Markdown', message_thread_id=thread_id)
             return
 
         # Kelompokkan data absensi berdasarkan tanggal
@@ -312,19 +348,14 @@ def register_user_handlers(bot: telebot.TeleBot):
                 pesan += f"  - @{username}\n"
             pesan += "\n"
 
-        bot.reply_to(message, pesan, parse_mode='Markdown', message_thread_id=message.message_thread_id)
+        bot.send_message(chat_id, pesan, parse_mode='Markdown', message_thread_id=thread_id)
 
-    @bot.message_handler(commands=['batal_jadwal'])
-    def handle_batal_jadwal(message):
-        """Membatalkan semua jadwal standby pengguna di bulan aktif."""
-        if not is_allowed(message):
-            return
-        
-        user_id = message.from_user.id
+    def start_batal_jadwal_flow(chat_id, user, thread_id=None):
+        user_id = user.id
         bulan_terbuka = get_bulan_dibuka()
         
         if not bulan_terbuka:
-            bot.reply_to(message, "Saat ini tidak ada periode jadwal yang sedang dibuka untuk dibatalkan.", message_thread_id=message.message_thread_id)
+            bot.send_message(chat_id, "Saat ini tidak ada periode jadwal yang sedang dibuka untuk dibatalkan.", message_thread_id=thread_id)
             return
 
         tahun, bulan = bulan_terbuka['tahun'], bulan_terbuka['bulan']
@@ -333,13 +364,11 @@ def register_user_handlers(bot: telebot.TeleBot):
         user_batal_selections[user_id] = {'choices': set(), 'timestamp': time.time()}
         
         markup = create_calendar('batal_jadwal', user_id, tahun, bulan)
-        bot.send_message(message.chat.id, "Pilih jadwal yang ingin Anda batalkan:", reply_markup=markup, message_thread_id=message.message_thread_id)
+        bot.send_message(chat_id, "Pilih jadwal yang ingin Anda batalkan:", reply_markup=markup, message_thread_id=thread_id)
 
 
-    @bot.message_handler(commands=['batal_cuti'])
-    def handle_batal_cuti(message):
-        if not is_allowed(message): return
-        user_id = message.from_user.id
+    def start_batal_cuti_flow(chat_id, user, thread_id=None):
+        user_id = user.id
         today = date.today()
         tahun, bulan = today.year, today.month
         
@@ -347,7 +376,124 @@ def register_user_handlers(bot: telebot.TeleBot):
         user_batal_cuti_selections[user_id] = {'choices': set(), 'timestamp': time.time()}
 
         markup = create_calendar('batal_cuti', user_id, tahun, bulan)
-        bot.send_message(message.chat.id, "Pilih tanggal cuti yang ingin Anda batalkan:", reply_markup=markup, message_thread_id=message.message_thread_id)
+        bot.send_message(chat_id, "Pilih tanggal cuti yang ingin Anda batalkan:", reply_markup=markup, message_thread_id=thread_id)
+
+    def send_guide(chat_id, thread_id=None):
+        help_text = (
+            "ℹ️ *Panduan Bot Jadwal Standby*\n\n"
+            "Perintah yang bisa digunakan di grup:\n\n"
+            "*/menu* - Membuka tombol menu bot.\n"
+            "*/start* - Mengisi/mengedit jadwal Anda.\n"
+            "*/lihat_jadwal* - Menampilkan rekap jadwal tim.\n"
+            "*/jadwal_saya* - Menampilkan daftar jadwal pribadi Anda.\n"
+            "*/cuti* - Menandai tanggal Anda tidak bersedia (cuti).\n"
+            "*/lihat_cuti* - Menampilkan daftar cuti tim di bulan aktif.\n"
+            "*/tukar_jadwal* - Mengajukan pertukaran jadwal.\n"
+            "*/batal_jadwal* - Membatalkan jadwal standby yang sudah ada.\n"
+            "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
+            "*/guide* atau */panduan* - Menampilkan panduan ini.\n\n"
+            "Catatan weekend: setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan."
+        )
+        bot.send_message(chat_id, help_text, parse_mode='Markdown', message_thread_id=thread_id)
+
+    @bot.message_handler(commands=['menu'])
+    def handle_menu(message):
+        if not is_allowed(message): return
+        send_main_menu(message.chat.id, message.message_thread_id)
+
+    @bot.message_handler(commands=['start'])
+    def handle_start(message):
+        if not is_allowed(message): return
+        start_jadwal_flow(message.chat.id, message.from_user, message.message_thread_id)
+
+    @bot.message_handler(commands=['jadwal_saya'])
+    def handle_jadwal_saya(message):
+        if not is_allowed(message): return
+        send_jadwal_saya(message.chat.id, message.from_user, message.message_thread_id)
+
+    @bot.message_handler(commands=['lihat_jadwal'])
+    def handle_lihat_jadwal(message):
+        if not is_allowed(message): return
+        send_lihat_jadwal(message.chat.id, message.message_thread_id)
+
+    @bot.message_handler(commands=['cuti'])
+    def handle_cuti(message):
+        if not is_allowed(message): return
+        start_cuti_flow(message.chat.id, message.from_user, message.message_thread_id)
+        
+    @bot.message_handler(commands=['lihat_cuti'])
+    def handle_lihat_cuti(message):
+        """Menampilkan daftar pengguna yang sedang cuti di bulan yang sedang dibuka."""
+        if not is_allowed(message):
+            return
+        send_lihat_cuti(message.chat.id, message.message_thread_id)
+
+    @bot.message_handler(commands=['batal_jadwal'])
+    def handle_batal_jadwal(message):
+        """Membatalkan semua jadwal standby pengguna di bulan aktif."""
+        if not is_allowed(message):
+            return
+        start_batal_jadwal_flow(message.chat.id, message.from_user, message.message_thread_id)
+
+    @bot.message_handler(commands=['batal_cuti'])
+    def handle_batal_cuti(message):
+        if not is_allowed(message): return
+        start_batal_cuti_flow(message.chat.id, message.from_user, message.message_thread_id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('menu_'))
+    def handle_menu_callbacks(call):
+        thread_id = call.message.message_thread_id
+        action = call.data[5:]
+
+        if action == 'start':
+            start_jadwal_flow(call.message.chat.id, call.from_user, thread_id)
+        elif action == 'jadwal_saya':
+            send_jadwal_saya(call.message.chat.id, call.from_user, thread_id)
+        elif action == 'lihat_jadwal':
+            send_lihat_jadwal(call.message.chat.id, thread_id)
+        elif action == 'cuti':
+            start_cuti_flow(call.message.chat.id, call.from_user, thread_id)
+        elif action == 'lihat_cuti':
+            send_lihat_cuti(call.message.chat.id, thread_id)
+        elif action == 'batal_jadwal':
+            start_batal_jadwal_flow(call.message.chat.id, call.from_user, thread_id)
+        elif action == 'batal_cuti':
+            start_batal_cuti_flow(call.message.chat.id, call.from_user, thread_id)
+        elif action == 'tukar_jadwal':
+            bot.send_message(call.message.chat.id, "Untuk tukar jadwal, gunakan perintah `/tukar_jadwal` lalu pilih jadwal dan mention rekan yang ingin diajak tukar.", parse_mode='Markdown', message_thread_id=thread_id)
+        elif action == 'panduan':
+            send_guide(call.message.chat.id, thread_id)
+
+        bot.answer_callback_query(call.id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('reason_'))
+    def handle_calendar_reason_callbacks(call):
+        parts = call.data.split('_', 2)
+        reason = parts[1] if len(parts) > 1 else ''
+        tanggal_str = parts[2] if len(parts) > 2 else ''
+
+        if reason == 'absen':
+            message_text = "Tanggal ini terkunci karena Anda menandai cuti/tidak tersedia."
+        elif reason == 'full':
+            max_limit = get_daily_limit(tanggal_str, 1)
+            message_text = f"Tanggal ini sudah penuh ({max_limit} orang)."
+        elif reason == 'weekend':
+            message_text = get_weekend_limit_message(tanggal_str)
+        else:
+            message_text = "Tanggal ini tidak bisa dipilih."
+
+        bot.answer_callback_query(call.id, message_text, show_alert=True)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('openmonth_'))
+    def handle_open_month_callbacks(call):
+        parts = call.data.split('_')
+        if len(parts) != 3:
+            bot.answer_callback_query(call.id, "Pilihan bulan tidak valid.", show_alert=True)
+            return
+
+        tahun, bulan = int(parts[1]), int(parts[2])
+        start_jadwal_flow(call.message.chat.id, call.from_user, call.message.message_thread_id, tahun, bulan)
+        bot.answer_callback_query(call.id)
 
     @bot.callback_query_handler(func=lambda call: call.data.split('_')[0] in ['jadwal', 'cuti', 'view', 'batal'])
     def handle_all_callbacks(call):
@@ -429,10 +575,8 @@ def register_user_handlers(bot: telebot.TeleBot):
                 date_str = '_'.join(parts[2:])
                 selections = selection_dict[user_id]['choices']
                 if mode == 'jadwal' and date_str not in selections:
-                    dt_obj_toggle = datetime.strptime(date_str, '%Y-%m-%d').date()
-                    pasangan_weekend = get_pasangan_weekend(dt_obj_toggle)
-                    if pasangan_weekend and pasangan_weekend.strftime('%Y-%m-%d') in selections:
-                        bot.answer_callback_query(call.id, "❌ Hanya bisa pilih Sabtu atau Minggu.", show_alert=True)
+                    if is_weekend_monthly_locked(date_str, selections):
+                        bot.answer_callback_query(call.id, get_weekend_limit_message(date_str), show_alert=True)
                         return
 
                     # --- LOGIKA BARU: Cek batasan harian ---
@@ -473,7 +617,14 @@ def register_user_handlers(bot: telebot.TeleBot):
                 year, month = int(parts[2]), int(parts[3])
                 pilihan_final = list(selection_dict.get(user_id, {}).get('choices', []))
                 if mode == 'jadwal':
-                    update_user_jadwal_for_month(user_id, call.from_user.first_name, call.from_user.username, pilihan_final, year, month)
+                    is_valid, error_message = validate_weekend_monthly_limits(pilihan_final)
+                    if not is_valid:
+                        bot.answer_callback_query(call.id, f"❌ {error_message}", show_alert=True)
+                        return
+                    update_success = update_user_jadwal_for_month(user_id, call.from_user.first_name, call.from_user.username, pilihan_final, year, month)
+                    if not update_success:
+                        bot.answer_callback_query(call.id, "❌ Gagal menyimpan jadwal. Mohon periksa pilihan Anda.", show_alert=True)
+                        return
                     pesan = f"✅ Jadwal Anda untuk bulan {NAMA_BULAN[month]} {year} telah disimpan."
                     
                     # Sync ke Google Sheets untuk setiap tanggal yang dipilih
@@ -552,26 +703,22 @@ def register_user_handlers(bot: telebot.TeleBot):
         bot.answer_callback_query(call.id)
     
 def register_help_handler(bot: telebot.TeleBot):
-        @bot.message_handler(commands=['help'])
+        @bot.message_handler(commands=['help', 'guide', 'panduan'])
         def handle_help(message):
             if not is_allowed(message): return
             help_text = (
-                "ℹ️ *Bantuan Bot Jadwal Standby*\n\n"
-                "Berikut adalah daftar perintah yang bisa Anda gunakan:\n\n"
-                "👤 *Perintah Umum:*\n"
+                "ℹ️ *Panduan Bot Jadwal Standby*\n\n"
+                "Perintah yang bisa digunakan di grup:\n\n"
+                "*/menu* - Membuka tombol menu bot.\n"
                 "*/start* - Mengisi/mengedit jadwal Anda.\n"
                 "*/lihat_jadwal* - Menampilkan rekap jadwal tim.\n"
                 "*/jadwal_saya* - Menampilkan daftar jadwal pribadi Anda.\n"
                 "*/cuti* - Menandai tanggal Anda tidak bersedia (cuti).\n"
-                "*/lihat_cuti* - Menampilkan daftar cuti tim di bulan aktif.\n"  # <-- BARIS BARU
+                "*/lihat_cuti* - Menampilkan daftar cuti tim di bulan aktif.\n"
                 "*/tukar_jadwal* - Mengajukan pertukaran jadwal.\n"
                 "*/batal_jadwal* - Membatalkan jadwal standby yang sudah ada.\n"
                 "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
-                "*/help* - Menampilkan pesan bantuan ini.\n\n"
-                "👑 *Perintah Khusus Admin:*\n"
-                "*/upload_grup_csv* - 📥 Upload data pengguna via file CSV.\n" # <-- BARIS BARU
-                "*/buka_jadwal_bulan* - Membuka jadwal untuk bulan ini/spesifik.\n"
-                "*/tutup_jadwal_bulan* - Menutup jadwal bulan yang sedang dibuka.\n"
-                "*/statistik* - Menampilkan laporan jumlah jadwal."
+                "*/guide* atau */panduan* - Menampilkan panduan ini.\n\n"
+                "Catatan weekend: setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan."
             )
             bot.send_message(message.chat.id, help_text, parse_mode='Markdown', message_thread_id=message.message_thread_id)

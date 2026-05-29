@@ -21,7 +21,7 @@ from core.database import (
     create_tables, init_default_admin,
     set_daily_limit, get_all_daily_limits, delete_daily_limit, get_daily_limit,
     is_date_full, add_audit_log, get_audit_logs,
-    get_all_settings, set_setting
+    get_all_settings, set_setting, can_user_take_weekend_date
 )
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets, get_google_sheets_client
 
@@ -359,6 +359,11 @@ def create_app():
             if is_date_full(tanggal, 1):
                 max_limit = get_daily_limit(tanggal, 1)
                 flash(f'❌ Tanggal {tanggal} sudah penuh ({max_limit} orang). Tidak bisa menambah jadwal.', 'error')
+                return redirect(url_for('schedules'))
+
+            if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):
+                hari = 'Sabtu' if datetime.strptime(tanggal, '%Y-%m-%d').weekday() == 5 else 'Minggu'
+                flash(f'❌ {username} sudah memiliki jadwal {hari} di bulan ini. Maksimal 1 {hari} per bulan.', 'error')
                 return redirect(url_for('schedules'))
             
             if add_jadwal_manual(user_id, username, telegram_username, tanggal):
