@@ -115,21 +115,21 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title text-lg">Tanggal Kurang Kuota</h3>
-                <p class="card-description">Slot divisi yang belum terpenuhi.</p>
+                <h3 class="card-title text-lg">Tanggal yang Belum di Isi</h3>
+                <p class="card-description">Tanggal yang belum memiliki PIC sama sekali.</p>
             </div>
             <div class="card-content">
-                {% if report.under_quota %}
+                {% if report.empty_dates %}
                 <div class="space-y-2 max-h-96 overflow-y-auto pr-1">
-                    {% for item in report.under_quota %}
+                    {% for tanggal in report.empty_dates %}
                     <div class="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm">
-                        <span class="font-bold">{{ item.tanggal }} - {{ item.group_name }}</span>
-                        <span class="font-black text-amber-700">{{ item.current }}/{{ item.limit }}</span>
+                        <span class="font-bold">{{ tanggal }}</span>
+                        <span class="font-black text-amber-700">Belum diisi</span>
                     </div>
                     {% endfor %}
                 </div>
                 {% else %}
-                <p class="text-sm text-muted-foreground">Tidak ada tanggal yang kurang kuota.</p>
+                <p class="text-sm text-muted-foreground">Semua tanggal sudah memiliki PIC.</p>
                 {% endif %}
             </div>
         </div>
