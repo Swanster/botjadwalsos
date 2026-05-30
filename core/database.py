@@ -9,6 +9,20 @@ makassar_tz = pytz.timezone("Asia/Makassar")
 
 from config import DB_NAME
 
+GROUP_NAMES = ('INFRA', 'CE', 'APPS', 'MONITORING')
+GROUP_QUOTA_SETTING_KEYS = {
+    'INFRA': 'kuota_infra',
+    'CE': 'kuota_ce',
+    'APPS': 'kuota_apps',
+    'MONITORING': 'kuota_monitoring',
+}
+GROUP_DEFAULT_QUOTAS = {
+    'INFRA': 2,
+    'CE': 1,
+    'APPS': 1,
+    'MONITORING': 1,
+}
+
 def get_all_months_status():
     """Mengambil semua bulan yang pernah dibuka/ditutup dari status_bulanan."""
     with connect_db() as conn:
@@ -504,6 +518,68 @@ def init_default_settings():
         conn.commit()
     print("🔧 Default settings berhasil diinisialisasi.")
 
+def get_group_quota(group_name):
+    """Mengambil kuota harian untuk divisi tertentu."""
+    group_name = (group_name or '').upper()
+    setting_key = GROUP_QUOTA_SETTING_KEYS.get(group_name)
+    default_quota = GROUP_DEFAULT_QUOTAS.get(group_name, 1)
+    if not setting_key:
+        return default_quota
+
+    try:
+        return max(0, int(get_setting(setting_key, default_quota)))
+    except (TypeError, ValueError):
+        return default_quota
+
+def get_group_assignment_count_for_date(tanggal, group_name, exclude_user_id=None):
+    """Menghitung jumlah jadwal divisi pada tanggal tertentu."""
+    group_name = (group_name or '').upper()
+    with connect_db() as conn:
+        cur = conn.cursor()
+        params = [tanggal, group_name]
+        exclude_clause = ''
+        if exclude_user_id is not None:
+            exclude_clause = 'AND j.user_id != ?'
+            params.append(exclude_user_id)
+
+        cur.execute(f"""
+            SELECT COUNT(*) as count
+            FROM jadwal j
+            JOIN user_groups ug ON j.user_id = ug.user_id
+            WHERE j.tanggal = ? AND ug.group_name = ?
+            {exclude_clause}
+        """, params)
+        result = cur.fetchone()
+        return result['count'] if result else 0
+
+def get_group_quota_status_for_date(tanggal):
+    """Mengambil status kuota semua divisi untuk satu tanggal."""
+    status = {}
+    for group_name in GROUP_NAMES:
+        limit = get_group_quota(group_name)
+        current = get_group_assignment_count_for_date(tanggal, group_name)
+        status[group_name] = {
+            'limit': limit,
+            'current': current,
+            'remaining': max(0, limit - current),
+            'is_full': current >= limit,
+        }
+    return status
+
+def can_add_user_to_group_quota(user_id, tanggal):
+    """Cek apakah user masih boleh ditambahkan sesuai kuota divisinya."""
+    group_name = get_user_group(user_id)
+    if not group_name:
+        return False, 'UNKNOWN', 0, 0
+
+    limit = get_group_quota(group_name)
+    current_without_user = get_group_assignment_count_for_date(
+        tanggal,
+        group_name,
+        exclude_user_id=user_id
+    )
+    return current_without_user < limit, group_name, current_without_user, limit
+
 # =============================================================================
 # ADMIN USER FUNCTIONS (untuk web dashboard login)
 # =============================================================================
@@ -585,6 +661,10 @@ def init_default_admin():
 def add_jadwal_manual(user_id, username, telegram_username, tanggal):
     """Menambahkan jadwal secara manual oleh admin."""
     try:
+        allowed, _, _, _ = can_add_user_to_group_quota(user_id, tanggal)
+        if not allowed:
+            return False
+
         with connect_db() as conn:
             cur = conn.cursor()
             if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):

@@ -19,6 +19,7 @@ from core.database import (
     is_date_full, get_daily_limit, get_weekend_monthly_limit_key, validate_weekend_monthly_limits
 )
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets
+from core.schedule_recap import generate_rekap_text as build_rekap_text
 
 # Variabel global
 user_selections, user_cuti_selections = {}, {}
@@ -183,21 +184,7 @@ def create_calendar(mode, user_id, year, month):
     return markup
 
 def generate_rekap_text(tahun, bulan):
-    jadwal_list = get_jadwal_for_month(tahun, bulan)
-    if not jadwal_list:
-        return f"Belum ada jadwal yang diinput untuk bulan {NAMA_BULAN[bulan]} {tahun}."
-    jadwal_per_hari = defaultdict(list)
-    for j in jadwal_list: jadwal_per_hari[j['tanggal']].append(j['username'])
-    pesan = f"📋 *Rekap Jadwal Standby Bulan {NAMA_BULAN[bulan]} {tahun}*\n\n"
-    days_in_month = calendar.monthrange(tahun, bulan)[1]
-    for day in range(1, days_in_month + 1):
-        current_date = date(tahun, bulan, day)
-        current_date_str = current_date.strftime('%Y-%m-%d')
-        nama_hari = HARI_MAP_ID[current_date.weekday()]
-        petugas = jadwal_per_hari.get(current_date_str)
-        if petugas: pesan += f"*{current_date.day}* {nama_hari}: {', '.join(petugas)}\n"
-        else: pesan += f"*{current_date.day}* {nama_hari}: _(kosong)_\n"
-    return pesan
+    return build_rekap_text(tahun, bulan)
 
 def register_user_handlers(bot: telebot.TeleBot):
 

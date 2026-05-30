@@ -21,9 +21,11 @@ from core.database import (
     create_tables, init_default_admin,
     set_daily_limit, get_all_daily_limits, delete_daily_limit, get_daily_limit,
     is_date_full, add_audit_log, get_audit_logs,
-    get_all_settings, set_setting, can_user_take_weekend_date
+    get_all_settings, set_setting, can_user_take_weekend_date,
+    get_group_quota_status_for_date, can_add_user_to_group_quota
 )
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets, get_google_sheets_client
+from core.monthly_report import build_monthly_report
 
 # =============================================================================
 # FLASK APP SETUP (Fixed - removed settings dependency, added daily limits validation)
@@ -194,6 +196,32 @@ def create_app():
             bulan_dibuka=bulan_dibuka
         )
 
+    @app.route('/monthly-report')
+    @login_required
+    def monthly_report():
+        today = date.today()
+        year = request.args.get('year', today.year, type=int)
+        month = request.args.get('month', today.month, type=int)
+
+        if month < 1 or month > 12:
+            flash('Bulan tidak valid.', 'error')
+            return redirect(url_for('monthly_report'))
+
+        report = build_monthly_report(year, month)
+        prev_month = month - 1 if month > 1 else 12
+        prev_year = year if month > 1 else year - 1
+        next_month = month + 1 if month < 12 else 1
+        next_year = year if month < 12 else year + 1
+
+        return render_template(
+            'monthly_report.html',
+            report=report,
+            prev_month=prev_month,
+            prev_year=prev_year,
+            next_month=next_month,
+            next_year=next_year,
+        )
+
     # =============================================================================
     # ROUTES - MEMBERS
     # =============================================================================
@@ -273,6 +301,14 @@ def create_app():
         members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
         members_monitoring = [dict(m) for m in get_all_users_in_group('MONITORING')]
         all_members = members_infra + members_ce + members_apps + members_monitoring
+
+        assignment_counts = {}
+        for jadwal in jadwal_list:
+            user_id = jadwal['user_id']
+            assignment_counts[user_id] = assignment_counts.get(user_id, 0) + 1
+
+        for member in all_members:
+            member['assignment_count'] = assignment_counts.get(member['user_id'], 0)
         
         # Create user_id to group_name mapping
         user_group_map = {}
@@ -296,6 +332,7 @@ def create_app():
 
         # Get daily limits for this month
         daily_limits_info = {}
+        group_quota_info = {}
         for week in month_calendar:
             for day in week:
                 if day != 0:
@@ -303,6 +340,7 @@ def create_app():
                     limit = get_daily_limit(date_str, 1)
                     current_count = len(jadwal_per_tanggal.get(date_str, []))
                     is_full = current_count >= limit
+                    group_quota_info[date_str] = get_group_quota_status_for_date(date_str)
                     daily_limits_info[date_str] = {
                         'limit': limit,
                         'current': current_count,
@@ -319,7 +357,8 @@ def create_app():
             month_calendar=month_calendar,
             jadwal_per_tanggal=jadwal_per_tanggal,
             all_members=all_members,
-            daily_limits=daily_limits_info
+            daily_limits=daily_limits_info,
+            group_quotas=group_quota_info
         )
     
     @app.route('/schedules/add', methods=['POST'])
@@ -338,6 +377,11 @@ def create_app():
             user_group = get_user_group(user_id)
             if not user_group:
                 flash('User tidak ditemukan.', 'error')
+                return redirect(url_for('schedules'))
+
+            can_add_to_quota, quota_group, current_group_count, group_limit = can_add_user_to_group_quota(user_id, tanggal)
+            if not can_add_to_quota:
+                flash(f'❌ Kuota divisi {quota_group} pada {tanggal} sudah penuh ({current_group_count}/{group_limit}). Tidak bisa menambah jadwal.', 'error')
                 return redirect(url_for('schedules'))
             
             # Get username from members - convert sqlite3.Row to dict

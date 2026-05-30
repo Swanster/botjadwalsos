@@ -144,6 +144,11 @@
             
             <!-- Modal Body - Scrollable -->
             <div class="p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto max-h-[60vh]">
+                <!-- Quota Status -->
+                <div id="quotaStatus" class="space-y-2">
+                    <!-- Will be populated by JS -->
+                </div>
+
                 <!-- Assigned Members List -->
                 <div id="assignedMembers" class="space-y-2">
                     <!-- Will be populated by JS -->
@@ -158,12 +163,12 @@
                         <select id="modalUserId" name="user_id" required class="input w-full bg-secondary/20 focus:bg-white transition-all border-2 border-primary/30 focus:border-primary text-sm md:text-base py-3 md:py-2">
                             <option value="">-- Pilih Anggota --</option>
                             {% for m in all_members %}
-                            <option value="{{ m.user_id }}">{{ m.username or m.telegram_username }} ({{ m.group_name }})</option>
+                            <option value="{{ m.user_id }}" data-group="{{ m.group_name }}" data-assignment-count="{{ m.assignment_count }}">{{ m.username or m.telegram_username }} ({{ m.assignment_count }}) - {{ m.group_name }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     
-                    <button type="submit" class="btn btn-primary w-full py-3 md:py-4 rounded-xl shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-2 bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90 active:scale-95 text-sm md:text-base">
+                    <button id="submitScheduleBtn" type="submit" class="btn btn-primary w-full py-3 md:py-4 rounded-xl shadow-lg shadow-primary/30 hover:shadow-primary/50 transition-all font-black uppercase tracking-widest flex items-center justify-center gap-2 bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90 active:scale-95 text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none">
                         <span>✅ Sematkan Jadwal</span>
                     </button>
                 </form>
@@ -204,15 +209,69 @@
 const jadwalData = {{ jadwal_per_tanggal | tojson }};
 const allMembers = {{ all_members | tojson }};
 const dailyLimits = {{ daily_limits | tojson }};
+const groupQuotas = {{ group_quotas | tojson }};
+const groupOrder = ['INFRA', 'CE', 'APPS', 'MONITORING'];
+let activeDateStr = '';
+
+function getSelectedMember() {
+    const select = document.getElementById('modalUserId');
+    if (!select || !select.value) return null;
+    return allMembers.find(member => String(member.user_id) === String(select.value)) || null;
+}
+
+function updateQuotaPanel(dateStr) {
+    const quotaStatusDiv = document.getElementById('quotaStatus');
+    const submitBtn = document.getElementById('submitScheduleBtn');
+    const selectedMember = getSelectedMember();
+    const selectedGroup = selectedMember ? selectedMember.group_name : '';
+    const quotaForDate = groupQuotas[dateStr] || {};
+    let selectedGroupFull = false;
+
+    quotaStatusDiv.innerHTML = `
+        <div class="text-[9px] font-black uppercase text-muted-foreground tracking-widest flex items-center justify-between">
+            <span>Kuota Divisi</span>
+            ${selectedGroup ? `<span class="text-primary">${selectedGroup}</span>` : '<span>Pilih member</span>'}
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+            ${groupOrder.map(groupName => {
+                const info = quotaForDate[groupName] || { current: 0, limit: 0, remaining: 0, is_full: false };
+                const isSelected = selectedGroup === groupName;
+                if (isSelected && info.is_full) selectedGroupFull = true;
+                const colorClass = info.is_full ? 'border-red-500/40 bg-red-500/10 text-red-600' : 'border-primary/30 bg-primary/5 text-foreground';
+                const selectedClass = isSelected ? 'ring-2 ring-primary/40' : '';
+                return `
+                    <div class="rounded-xl border-2 ${colorClass} ${selectedClass} px-3 py-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[10px] font-black">${groupName}</span>
+                            <span class="text-xs font-black">${info.current}/${info.limit}</span>
+                        </div>
+                        <div class="mt-1 text-[9px] font-bold opacity-80">${info.is_full ? 'Penuh' : `${info.remaining} slot tersisa`}</div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+        ${selectedGroupFull ? '<div class="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-600 text-xs font-bold">Kuota divisi member yang dipilih sudah penuh untuk tanggal ini.</div>' : ''}
+    `;
+
+    if (submitBtn) {
+        submitBtn.disabled = selectedGroupFull;
+    }
+}
 
 function openAssignModal(cell, dateStr) {
     const modal = document.getElementById('assignModal');
     const modalDate = document.getElementById('modalDate');
     const modalTanggal = document.getElementById('modalTanggal');
     const assignedMembersDiv = document.getElementById('assignedMembers');
+    const memberSelect = document.getElementById('modalUserId');
+    activeDateStr = dateStr;
     
     const limitInfo = dailyLimits[dateStr] || { limit: 1, current: 0, is_full: false };
     const formEl = document.querySelector('#assignModal form');
+    if (memberSelect) {
+        memberSelect.value = '';
+    }
+    updateQuotaPanel(dateStr);
     
     if (limitInfo.is_full) {
         formEl.style.display = 'none';
@@ -323,5 +382,11 @@ modal.addEventListener('touchend', e => {
 document.querySelector('#assignedMembers')?.addEventListener('touchmove', e => {
     e.stopPropagation();
 }, { passive: true });
+
+document.getElementById('modalUserId')?.addEventListener('change', () => {
+    if (activeDateStr) {
+        updateQuotaPanel(activeDateStr);
+    }
+});
 </script>
 {% endblock %}

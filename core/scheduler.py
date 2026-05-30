@@ -16,6 +16,8 @@ from core.database import (
     can_user_take_weekend_date, get_user_jadwal_for_month,
     get_weekend_monthly_limit_key
 )
+from core.monthly_report import build_monthly_report, format_monthly_report_for_telegram
+from core.schedule_recap import generate_rekap_text
 
 # Decorator retry_on_failure (TETAP SAMA)
 def retry_on_failure(retries=3, delay=10):
@@ -474,6 +476,42 @@ def kirim_peringatan_h_minus_3(bot):
     )
     print(f"Scheduler: Peringatan H-3 untuk tanggal {target_date_str} berhasil dikirim.")
 
+
+@retry_on_failure(retries=3, delay=60)
+def kirim_laporan_bulanan(bot):
+    """Mengirim laporan jadwal bulanan ke grup pada hari terakhir bulan."""
+    print("Scheduler: Membuat laporan jadwal bulanan...")
+    tz = pytz.timezone("Asia/Makassar")
+    today = datetime.now(tz).date()
+    report = build_monthly_report(today.year, today.month)
+    pesan = format_monthly_report_for_telegram(report)
+
+    bot.send_message(
+        chat_id=GROUP_CHAT_ID,
+        text=pesan,
+        parse_mode='Markdown',
+        message_thread_id=ALLOWED_TOPIC_ID
+    )
+    print(f"Scheduler: Laporan bulanan {today.year}-{today.month:02d} berhasil dikirim.")
+
+
+@retry_on_failure(retries=3, delay=60)
+def kirim_jadwal_bulanan_awal_bulan(bot):
+    """Mengirim rekap jadwal full bulan ke grup setiap tanggal 1."""
+    print("Scheduler: Mengirim rekap jadwal awal bulan...")
+    tz = pytz.timezone("Asia/Makassar")
+    today = datetime.now(tz).date()
+    pesan = generate_rekap_text(today.year, today.month)
+    pesan += "\n\nJika Ingin tukar jadwal ketik menu `/tukar_jadwal`"
+
+    bot.send_message(
+        chat_id=GROUP_CHAT_ID,
+        text=pesan,
+        parse_mode='Markdown',
+        message_thread_id=ALLOWED_TOPIC_ID
+    )
+    print(f"Scheduler: Rekap jadwal awal bulan {today.year}-{today.month:02d} berhasil dikirim.")
+
 def init_scheduler(bot):
     """Menginisialisasi dan memulai semua scheduler."""
     scheduler = BackgroundScheduler(timezone=pytz.timezone("Asia/Makassar"))
@@ -507,7 +545,19 @@ def init_scheduler(bot):
         lambda: kirim_peringatan_h_minus_3(bot), trigger='cron',
         hour=8, minute=0, id='daily_h3_warning', replace_existing=True
     )
+
+    # Job 6: Laporan jadwal bulanan - Setiap hari terakhir bulan jam 17:00
+    scheduler.add_job(
+        lambda: kirim_laporan_bulanan(bot), trigger='cron',
+        day='last', hour=17, minute=0, id='monthly_schedule_report', replace_existing=True
+    )
+
+    # Job 7: Rekap jadwal full bulan - Setiap tanggal 1 jam 07:10
+    scheduler.add_job(
+        lambda: kirim_jadwal_bulanan_awal_bulan(bot), trigger='cron',
+        day=1, hour=7, minute=10, id='monthly_schedule_recap_first_day', replace_existing=True
+    )
     
     scheduler.start()
-    print("Scheduler untuk semua pekerjaan (harian, mingguan, peringatan) telah dimulai.")
+    print("Scheduler untuk semua pekerjaan (harian, mingguan, bulanan, peringatan) telah dimulai.")
     return scheduler
