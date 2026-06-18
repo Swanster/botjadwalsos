@@ -8,7 +8,7 @@ from config import GROUP_CHAT_ID, ALLOWED_TOPIC_ID
 from core.database import (
     get_bulan_dibuka, get_user_jadwal_for_month, get_user_by_telegram_username,
     create_tukar_request, get_tukar_request_by_id, execute_swap,
-    update_tukar_request_status, format_tanggal_indonesia
+    update_tukar_request_status, format_tanggal_indonesia, validate_swap_date_type
 )
 
 swap_data = {}
@@ -99,6 +99,10 @@ def register_swap_handlers(bot: telebot.TeleBot):
             if user_id not in swap_data: return
             data = swap_data[user_id]
             data['tanggal_b'] = tanggal_b
+            is_valid_swap_type, swap_type_error = validate_swap_date_type(data['tanggal_a'], data['tanggal_b'])
+            if not is_valid_swap_type:
+                bot.answer_callback_query(call.id, f"❌ {swap_type_error}", show_alert=True)
+                return
             tgl_a_obj = datetime.strptime(data['tanggal_a'], '%Y-%m-%d').date()
             tgl_b_obj = datetime.strptime(data['tanggal_b'], '%Y-%m-%d').date()
             pesan = (f"Konfirmasi Pertukaran Jadwal:\n\nJadwal Anda: *{format_tanggal_indonesia(tgl_a_obj)}*\nAkan ditukar dengan jadwal @{data['user_b_username']}:\nJadwal @{data['user_b_username']}: *{format_tanggal_indonesia(tgl_b_obj)}*\n\nApakah Anda yakin?")
@@ -109,6 +113,11 @@ def register_swap_handlers(bot: telebot.TeleBot):
         elif action == 'confirm':
             if user_id not in swap_data: return
             data = swap_data[user_id]
+            is_valid_swap_type, swap_type_error = validate_swap_date_type(data['tanggal_a'], data['tanggal_b'])
+            if not is_valid_swap_type:
+                bot.answer_callback_query(call.id, f"❌ {swap_type_error}", show_alert=True)
+                if user_id in swap_data: del swap_data[user_id]
+                return
             request_id = create_tukar_request(user_id, call.from_user.first_name, data['user_b_id'], data['tanggal_a'], data['tanggal_b'])
             tgl_a_obj = datetime.strptime(data['tanggal_a'], '%Y-%m-%d').date()
             tgl_b_obj = datetime.strptime(data['tanggal_b'], '%Y-%m-%d').date()
@@ -136,6 +145,13 @@ def register_swap_handlers(bot: telebot.TeleBot):
             user_b_mention = f"[{call.from_user.first_name}](tg://user?id={call.from_user.id})"
             user_a_mention = f"[{req['user_a_username']}](tg://user?id={req['user_a_id']})"
             if action == 'approve':
+                is_valid_swap_type, swap_type_error = validate_swap_date_type(req['tanggal_a'], req['tanggal_b'])
+                if not is_valid_swap_type:
+                    update_tukar_request_status(request_id, 'REJECTED')
+                    pesan_final = f"❌ Pertukaran ditolak otomatis.\n\n{swap_type_error}"
+                    try: bot.edit_message_text(pesan_final, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
+                    except: bot.send_message(call.message.chat.id, pesan_final, parse_mode='Markdown', message_thread_id=thread_id)
+                    return
                 success = execute_swap(request_id)
                 if success:
                     pesan_final = (f"✅ Pertukaran Jadwal Disetujui!\n\n{user_a_mention} sekarang bertugas pada *{format_tanggal_indonesia(tgl_b_obj)}*.\n{user_b_mention} sekarang bertugas pada *{format_tanggal_indonesia(tgl_a_obj)}*.")

@@ -12,7 +12,8 @@ from core.database import (
     GROUP_NAMES, normalize_group_name,
     get_bulan_dibuka, get_bulan_dibuka_list, buka_bulan_baru, format_tanggal_indonesia, 
     get_jadwal_for_month, tutup_bulan_aktif, get_user_group, 
-    get_user_by_telegram_username, set_user_group, get_all_months_status
+    get_user_by_telegram_username, set_user_group, get_all_months_status,
+    get_all_registered_users
 )
 from core.google_sheets import get_google_sheets_client
 
@@ -33,6 +34,30 @@ def register_admin_handlers(bot: telebot.TeleBot):
         if message.chat.type != 'private':
             return False
         return True
+
+    def blast_jadwal_dibuka_to_members(tahun, bulan):
+        nama_bulan_full = NAMA_BULAN[bulan]
+        pesan = (
+            f"📢 *Jadwal Standby Dibuka*\n\n"
+            f"Periode pengisian jadwal standby untuk bulan *{nama_bulan_full} {tahun}* sudah dibuka.\n\n"
+            f"Silakan isi jadwal melalui perintah /start.\n\n"
+            f"📌 *Catatan aturan jadwal:*\n"
+            f"- Maksimal 2 jadwal weekday sebelum memilih minimal 1 jadwal weekend.\n"
+            f"- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
+            f"- Tukar jadwal harus tipe hari yang sama: weekday dengan weekday, weekend dengan weekend."
+        )
+        success_count = 0
+        failed_users = []
+
+        for user in get_all_registered_users():
+            try:
+                bot.send_message(user['user_id'], pesan, parse_mode='Markdown')
+                success_count += 1
+            except Exception:
+                username = user.get('telegram_username') or str(user['user_id'])
+                failed_users.append(username)
+
+        return success_count, failed_users
     
     @bot.message_handler(commands=['buka_jadwal_bulan'])
     def handle_buka_jadwal_bulan(message):
@@ -66,7 +91,17 @@ def register_admin_handlers(bot: telebot.TeleBot):
         pesan_pengumuman = (f"📢 *Pengumuman Jadwal Bulanan*\n\nPeriode pengisian jadwal standby untuk bulan *{nama_bulan_full} {tahun}* telah dibuka!\n\nSilakan anggota tim untuk mulai mengisi jadwal dengan mengirim perintah /start.")
         try:
             bot.send_message(chat_id=GROUP_CHAT_ID, text=pesan_pengumuman, parse_mode='Markdown', message_thread_id=ALLOWED_TOPIC_ID)
-            bot.reply_to(message, f"✅ Berhasil! Pengumuman untuk jadwal bulan {nama_bulan_full} {tahun} telah dikirim ke grup.")
+            success_count, failed_users = blast_jadwal_dibuka_to_members(tahun, bulan)
+            reply_text = (
+                f"✅ Berhasil! Pengumuman untuk jadwal bulan {nama_bulan_full} {tahun} telah dikirim ke grup.\n\n"
+                f"📨 Blast DM member: {success_count} terkirim"
+            )
+            if failed_users:
+                failed_preview = ', '.join(f"@{username}" for username in failed_users[:10])
+                if len(failed_users) > 10:
+                    failed_preview += f", dan {len(failed_users) - 10} lainnya"
+                reply_text += f"\n⚠️ Gagal DM: {failed_preview}"
+            bot.reply_to(message, reply_text)
         except Exception as e:
             bot.reply_to(message, f"Terjadi kesalahan saat mengirim pengumuman: {e}")
             

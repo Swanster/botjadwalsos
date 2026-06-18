@@ -274,8 +274,10 @@ def update_user_jadwal_for_month(user_id, first_name, telegram_username, list_of
         try:
             cur = conn.cursor()
             cur.execute("BEGIN TRANSACTION;")
-            is_valid, error_message = validate_weekend_monthly_limits(list_of_tanggal)
-            if not is_valid:
+            weekend_valid, error_message = validate_weekend_monthly_limits(list_of_tanggal)
+            balance_valid, balance_error = validate_weekday_weekend_balance(list_of_tanggal)
+            if not weekend_valid or not balance_valid:
+                error_message = error_message or balance_error
                 raise ValueError(error_message)
             cur.execute("DELETE FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?", (user_id, start_of_month, end_of_month))
             if list_of_tanggal:
@@ -411,6 +413,14 @@ def get_tukar_request_by_id(request_id):
         cur.execute("SELECT * FROM tukar_requests WHERE id = ?", (request_id,))
         return row_to_dict(cur.fetchone())
 
+def validate_swap_date_type(tanggal_a, tanggal_b):
+    """Pastikan tukar jadwal tidak mengubah tipe hari weekend/weekday."""
+    a_is_weekend = get_weekend_monthly_limit_key(tanggal_a) is not None
+    b_is_weekend = get_weekend_monthly_limit_key(tanggal_b) is not None
+    if a_is_weekend != b_is_weekend:
+        return False, "Tukar jadwal beda tipe hari tidak diperbolehkan. Weekend hanya bisa ditukar dengan weekend, dan weekday hanya dengan weekday."
+    return True, None
+
 def execute_swap(request_id):
     """Menukar jadwal antara dua user. Username diambil dari user_groups."""
     req = get_tukar_request_by_id(request_id)
@@ -423,6 +433,10 @@ def execute_swap(request_id):
             user_b_details = cur.execute("SELECT username, telegram_username FROM user_groups WHERE user_id = ?", (req['user_b_id'],)).fetchone()
             user_a_details = cur.execute("SELECT username, telegram_username FROM user_groups WHERE user_id = ?", (req['user_a_id'],)).fetchone()
             if not user_a_details or not user_b_details: raise sqlite3.OperationalError("User details not found in user_groups.")
+
+            date_type_valid, date_type_error = validate_swap_date_type(req['tanggal_a'], req['tanggal_b'])
+            if not date_type_valid:
+                raise ValueError(date_type_error)
 
             affected_months = {
                 (datetime.strptime(req['tanggal_a'], '%Y-%m-%d').year, datetime.strptime(req['tanggal_a'], '%Y-%m-%d').month),
@@ -445,6 +459,10 @@ def execute_swap(request_id):
             user_b_tanggal = get_dates_after_swap(req['user_b_id'], req['tanggal_b'], req['tanggal_a'])
             user_a_valid, user_a_error = validate_weekend_monthly_limits(user_a_tanggal)
             user_b_valid, user_b_error = validate_weekend_monthly_limits(user_b_tanggal)
+            if not user_a_valid or not user_b_valid:
+                raise ValueError(user_a_error or user_b_error)
+            user_a_valid, user_a_error = validate_weekday_weekend_balance(user_a_tanggal)
+            user_b_valid, user_b_error = validate_weekday_weekend_balance(user_b_tanggal)
             if not user_a_valid or not user_b_valid:
                 raise ValueError(user_a_error or user_b_error)
 
@@ -776,6 +794,19 @@ def add_jadwal_manual(user_id, username, telegram_username, tanggal):
             cur = conn.cursor()
             if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):
                 return False
+            target_date = datetime.strptime(tanggal, '%Y-%m-%d').date()
+            start_date = f"{target_date.year}-{target_date.month:02d}-01"
+            end_date = f"{target_date.year}-{target_date.month:02d}-{calendar.monthrange(target_date.year, target_date.month)[1]}"
+            cur.execute(
+                "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
+                (user_id, start_date, end_date)
+            )
+            tanggal_list = [row['tanggal'] for row in cur.fetchall()]
+            if tanggal not in tanggal_list:
+                tanggal_list.append(tanggal)
+            balance_valid, _ = validate_weekday_weekend_balance(tanggal_list)
+            if not balance_valid:
+                return False
             cur.execute(
                 "INSERT OR REPLACE INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)",
                 (user_id, username, telegram_username, tanggal)
@@ -865,6 +896,24 @@ def validate_weekend_monthly_limits(list_of_tanggal, limit=1):
         if counts[key] > limit:
             nama_hari = 'Sabtu' if key[2] == 5 else 'Minggu'
             return False, f"Maksimal {limit} {nama_hari} per bulan."
+    return True, None
+
+def validate_weekday_weekend_balance(list_of_tanggal, weekday_limit=2):
+    """Pastikan user mengambil weekend setelah tiap 2 jadwal weekday dalam bulan yang sama."""
+    monthly_counts = {}
+    for tanggal in list_of_tanggal:
+        tanggal_obj = datetime.strptime(tanggal, '%Y-%m-%d').date()
+        month_key = (tanggal_obj.year, tanggal_obj.month)
+        counts = monthly_counts.setdefault(month_key, {'weekday': 0, 'weekend': 0})
+        if get_weekend_monthly_limit_key(tanggal):
+            counts['weekend'] += 1
+        else:
+            counts['weekday'] += 1
+
+    for counts in monthly_counts.values():
+        allowed_weekdays = (counts['weekend'] + 1) * weekday_limit
+        if counts['weekday'] > allowed_weekdays:
+            return False, f"Anda sudah memilih {weekday_limit} jadwal weekday. Pilih minimal 1 jadwal weekend dulu sebelum menambah weekday lagi."
     return True, None
 
 def can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=None, limit=1):

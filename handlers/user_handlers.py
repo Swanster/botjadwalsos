@@ -17,7 +17,8 @@ from core.database import (
     format_tanggal_indonesia, get_user_jadwal_for_month, get_jadwal_for_specific_date,
     get_user_group, get_jadwal_by_group, get_all_users_in_group, get_all_absensi_in_range,
     delete_user_jadwal_on_dates, get_setting,
-    is_date_full, get_daily_limit, get_weekend_monthly_limit_key, validate_weekend_monthly_limits
+    is_date_full, get_daily_limit, get_weekend_monthly_limit_key,
+    validate_weekday_weekend_balance, validate_weekend_monthly_limits
 )
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets
 from core.schedule_recap import generate_rekap_text as build_rekap_text
@@ -63,6 +64,17 @@ def is_weekend_monthly_locked(tanggal_str: str, pilihan_sementara) -> bool:
         if get_weekend_monthly_limit_key(pilihan) == weekend_key:
             return True
     return False
+
+def get_weekday_balance_message() -> str:
+    return "❌ Anda sudah memilih 2 jadwal weekday. Pilih minimal 1 jadwal weekend dulu sebelum menambah weekday lagi."
+
+def is_weekday_balance_locked(tanggal_str: str, pilihan_sementara) -> bool:
+    if get_weekend_monthly_limit_key(tanggal_str) or tanggal_str in pilihan_sementara:
+        return False
+    simulated_choices = set(pilihan_sementara)
+    simulated_choices.add(tanggal_str)
+    is_valid, _ = validate_weekday_weekend_balance(simulated_choices)
+    return not is_valid
 
 def create_reason_button(label: str, reason: str, tanggal_str: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(label, callback_data=f"reason_{reason}_{tanggal_str}")
@@ -152,10 +164,12 @@ def create_calendar(mode, user_id, year, month):
                     
                     is_penuh = jumlah_terisi >= max_per_hari
                     is_weekend_terkunci = is_weekend_monthly_locked(current_date_str, pilihan_sementara)
+                    is_weekday_balance_terkunci = is_weekday_balance_locked(current_date_str, pilihan_sementara)
 
                     if current_date_str in pilihan_sementara: label = f"✅{label}"
                     elif is_penuh: row_buttons.append(create_reason_button("❌", "full", current_date_str)); continue
                     elif is_weekend_terkunci: row_buttons.append(create_reason_button("-", "weekend", current_date_str)); continue
+                    elif is_weekday_balance_terkunci: row_buttons.append(create_reason_button("-", "weekdaybalance", current_date_str)); continue
                 
                 elif mode == 'cuti' and current_date_str in pilihan_sementara:
                     label = f"✅{label}"
@@ -372,7 +386,10 @@ def register_user_handlers(bot: telebot.TeleBot):
             "*/batal_jadwal* - Membatalkan jadwal standby yang sudah ada.\n"
             "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
             "*/guide* atau */panduan* - Menampilkan panduan ini.\n\n"
-            "Catatan weekend: setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan."
+            "📌 *Catatan aturan jadwal:*\n"
+            "- Maksimal 2 jadwal weekday sebelum memilih minimal 1 jadwal weekend.\n"
+            "- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
+            "- Tukar jadwal harus tipe hari yang sama: weekday dengan weekday, weekend dengan weekend."
         )
         bot.send_message(chat_id, help_text, parse_mode='Markdown', message_thread_id=thread_id)
 
@@ -459,6 +476,8 @@ def register_user_handlers(bot: telebot.TeleBot):
             message_text = f"Tanggal ini sudah penuh ({max_limit} orang)."
         elif reason == 'weekend':
             message_text = get_weekend_limit_message(tanggal_str)
+        elif reason == 'weekdaybalance':
+            message_text = get_weekday_balance_message()
         else:
             message_text = "Tanggal ini tidak bisa dipilih."
 
@@ -559,6 +578,10 @@ def register_user_handlers(bot: telebot.TeleBot):
                         bot.answer_callback_query(call.id, get_weekend_limit_message(date_str), show_alert=True)
                         return
 
+                    if is_weekday_balance_locked(date_str, selections):
+                        bot.answer_callback_query(call.id, get_weekday_balance_message(), show_alert=True)
+                        return
+
                     # --- LOGIKA BARU: Cek batasan harian ---
                     if is_date_full(date_str, 1):
                         max_limit = get_daily_limit(date_str, 1)
@@ -599,6 +622,10 @@ def register_user_handlers(bot: telebot.TeleBot):
                 pilihan_final = list(selection_dict.get(user_id, {}).get('choices', []))
                 if mode == 'jadwal':
                     is_valid, error_message = validate_weekend_monthly_limits(pilihan_final)
+                    if not is_valid:
+                        bot.answer_callback_query(call.id, f"❌ {error_message}", show_alert=True)
+                        return
+                    is_valid, error_message = validate_weekday_weekend_balance(pilihan_final)
                     if not is_valid:
                         bot.answer_callback_query(call.id, f"❌ {error_message}", show_alert=True)
                         return
@@ -700,6 +727,9 @@ def register_help_handler(bot: telebot.TeleBot):
                 "*/batal_jadwal* - Membatalkan jadwal standby yang sudah ada.\n"
                 "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
                 "*/guide* atau */panduan* - Menampilkan panduan ini.\n\n"
-                "Catatan weekend: setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan."
+                "📌 *Catatan aturan jadwal:*\n"
+                "- Maksimal 2 jadwal weekday sebelum memilih minimal 1 jadwal weekend.\n"
+                "- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
+                "- Tukar jadwal harus tipe hari yang sama: weekday dengan weekday, weekend dengan weekend."
             )
             bot.send_message(message.chat.id, help_text, parse_mode='Markdown', message_thread_id=message.message_thread_id)
