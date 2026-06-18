@@ -186,14 +186,20 @@
                     ('dashboard', '📊', 'Dashboard'),
                     ('schedules', '📅', 'Jadwal Manual'),
                     ('monthly_report', '📈', 'Laporan Bulanan'),
-                    ('members', '👥', 'Member'),
-                    ('daily_limits', '⚖️', 'Batasan Harian'),
-                    ('settings', '⚙️', 'Settings Kuota'),
-                    ('google_sheets', '📝', 'Google Sheets'),
-                    ('admins', '🔐', 'Admin User'),
-                    ('logs', '📜', 'Logs Aktivitas'),
-                    ('change_password', '🔑', 'Ganti Password')
+                    ('members', '👥', 'Member')
                 ] %}
+                {% if current_user.can_write %}
+                    {% set menu_items = menu_items + [
+                        ('daily_limits', '⚖️', 'Batasan Harian'),
+                        ('settings', '⚙️', 'Settings Kuota'),
+                        ('google_sheets', '📝', 'Google Sheets'),
+                        ('logs', '📜', 'Logs Aktivitas')
+                    ] %}
+                {% endif %}
+                {% if current_user.is_super_admin %}
+                    {% set menu_items = menu_items + [('admins', '🔐', 'User Akses')] %}
+                {% endif %}
+                {% set menu_items = menu_items + [('change_password', '🔑', 'Ganti Password')] %}
 
                 {% for endpoint, icon, label in menu_items %}
                 <a href="{{ url_for(endpoint) }}" class="group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 {% if request.endpoint == endpoint %}bg-gradient-to-r from-primary to-orange-400 text-white shadow-xl shadow-primary/20 scale-[1.02] font-bold{% else %}text-muted-foreground hover:bg-secondary hover:text-foreground hover:translate-x-1 active:scale-95{% endif %}">
@@ -210,7 +216,7 @@
                     </div>
                     <div class="flex flex-col">
                         <span class="text-xs font-black tracking-tight text-foreground">{{ current_user.username }}</span>
-                        <span class="text-[9px] text-muted-foreground font-bold uppercase tracking-wider">Administrator</span>
+                        <span class="text-[9px] text-muted-foreground font-bold uppercase tracking-wider">{{ current_user.role_label }}</span>
                     </div>
                 </div>
                 <a href="{{ url_for('logout') }}" class="flex items-center justify-center w-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] border-2 border-destructive text-destructive rounded-xl hover:bg-destructive hover:text-white transition-all active:scale-95">

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Kelola Admin{% endblock %}
+{% block title %}Kelola User Akses{% endblock %}
 
 {% block content %}
 <div class="flex flex-col space-y-10 animate-in fade-in duration-1000">
@@ -10,8 +10,8 @@
                 <span class="w-8 h-[2px] bg-primary rounded-full"></span>
                 Governance & Security
             </div>
-            <h2 class="text-4xl font-black tracking-tighter bg-gradient-to-r from-primary via-orange-400 to-primary bg-clip-text text-transparent">🔐 Administrasi Sistem</h2>
-            <p class="text-muted-foreground text-sm max-w-xl">Konfigurasi hak akses dan manajemen tingkat lanjut personil pengelola dashboard.</p>
+            <h2 class="text-4xl font-black tracking-tighter bg-gradient-to-r from-primary via-orange-400 to-primary bg-clip-text text-transparent">🔐 User Akses Sistem</h2>
+            <p class="text-muted-foreground text-sm max-w-xl">Kelola akun dashboard dengan role Super Admin, Admin, dan User.</p>
         </div>
     </div>
 
@@ -21,7 +21,7 @@
         <div class="xl:col-span-1">
             <div class="card border-primary/20 overflow-hidden shadow-2xl shadow-primary/5">
                 <div class="card-header bg-primary/5 p-6 border-b border-primary/10">
-                    <h3 class="text-sm font-black uppercase tracking-widest text-primary">Registrasi Administrator</h3>
+                    <h3 class="text-sm font-black uppercase tracking-widest text-primary">Registrasi User Dashboard</h3>
                     <p class="text-[10px] text-muted-foreground font-medium uppercase tracking-tighter mt-1 italic">Kredensial akses dashboard utama</p>
                 </div>
                 <div class="card-content p-8">
@@ -35,9 +35,17 @@
                                 <label for="password" class="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Kunci Akses</label>
                                 <input type="password" id="password" name="password" required class="input focus:ring-primary/40 bg-muted/20" placeholder="••••••••">
                             </div>
+                            <div class="space-y-2">
+                                <label for="role" class="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Role Akses</label>
+                                <select id="role" name="role" required class="input focus:ring-primary/40 bg-muted/20">
+                                    <option value="user">User - lihat jadwal/laporan</option>
+                                    <option value="admin">Admin - kelola operasional</option>
+                                    <option value="super_admin">Super Admin - akses penuh</option>
+                                </select>
+                            </div>
                         </div>
                         <button type="submit" class="btn btn-primary w-full py-6 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-primary/20 flex items-center justify-center gap-3 group">
-                            <span>Sahkan Admin</span>
+                            <span>Sahkan User</span>
                             <span class="group-hover:translate-x-1 transition-transform">→</span>
                         </button>
                     </form>
@@ -49,7 +57,7 @@
         <div class="xl:col-span-2">
             <div class="card border-primary/10 overflow-hidden">
                 <div class="card-header bg-muted/20 p-6 flex items-center justify-between">
-                    <h3 class="text-xs font-black uppercase tracking-widest text-muted-foreground">Arsip Administrator Aktif</h3>
+                    <h3 class="text-xs font-black uppercase tracking-widest text-muted-foreground">Akun Dashboard Aktif</h3>
                     <div class="flex items-center gap-4 text-[10px] font-black">
                         <span class="text-primary tracking-tighter italic">● HIGH SECURITY</span>
                     </div>
@@ -60,6 +68,7 @@
                         <thead>
                             <tr class="bg-card/50 text-muted-foreground border-b border-primary/5">
                                 <th class="h-12 px-6 text-left font-black uppercase tracking-widest">Identitas Profil</th>
+                                <th class="h-12 px-6 text-left font-black uppercase tracking-widest">Role</th>
                                 <th class="h-12 px-6 text-left font-black uppercase tracking-widest hidden sm:table-cell">Waktu Pendaftaran</th>
                                 <th class="h-12 px-6 text-right font-black uppercase tracking-widest">Kontrol Akses</th>
                             </tr>
@@ -74,9 +83,22 @@
                                         </div>
                                         <div class="flex flex-col">
                                             <span class="font-black text-foreground tracking-tight text-sm">{{ admin.username }}</span>
-                                            <span class="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">Authorized</span>
+                                            <span class="text-[9px] text-muted-foreground uppercase font-bold tracking-widest">
+                                                {% if admin.role == 'super_admin' %}Super Admin{% elif admin.role == 'admin' %}Admin{% else %}User{% endif %}
+                                            </span>
                                         </div>
                                     </div>
+                                </td>
+                                <td class="p-6 align-middle">
+                                    <form method="POST" action="{{ url_for('update_admin_role_route', admin_id=admin.id) }}" class="min-w-40">
+                                        <select name="role" class="input h-9 text-[10px] font-black uppercase tracking-widest"
+                                                onchange="this.form.submit()"
+                                                {% if admin.username == current_user.username %}disabled{% endif %}>
+                                            <option value="user" {% if admin.role == 'user' %}selected{% endif %}>User</option>
+                                            <option value="admin" {% if admin.role == 'admin' %}selected{% endif %}>Admin</option>
+                                            <option value="super_admin" {% if admin.role == 'super_admin' %}selected{% endif %}>Super Admin</option>
+                                        </select>
+                                    </form>
                                 </td>
                                 <td class="p-6 align-middle hidden sm:table-cell">
                                     <span class="font-bold text-muted-foreground/60 tracking-tighter">{{ admin.created_at[:16] }}</span>
@@ -88,12 +110,14 @@
                                                 data-username="{{ admin.username|e }}">
                                             <span class="text-xs">🔑</span>
                                         </button>
-                                        <form method="POST" action="{{ url_for('delete_admin', admin_id=admin.id) }}" 
-                                              onsubmit="return confirm('Cabut akses admin {{ admin.username }}?')">
-                                            <button type="submit" class="btn h-9 w-9 p-0 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/10 rounded-lg transition-all">
-                                                <span class="text-xs">🗑️</span>
-                                            </button>
-                                        </form>
+                                        {% if admin.username != current_user.username %}
+                                            <form method="POST" action="{{ url_for('delete_admin', admin_id=admin.id) }}" 
+                                                  onsubmit="return confirm('Cabut akses user {{ admin.username }}?')">
+                                                <button type="submit" class="btn h-9 w-9 p-0 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/10 rounded-lg transition-all">
+                                                    <span class="text-xs">🗑️</span>
+                                                </button>
+                                            </form>
+                                        {% endif %}
                                     </div>
                                 </td>
                             </tr>

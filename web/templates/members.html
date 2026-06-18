@@ -9,14 +9,17 @@
             <h2 class="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-orange-400 bg-clip-text text-transparent">👥 Database Anggota</h2>
             <p class="text-muted-foreground">Manajemen personil, registrasi anggota baru, dan pengelolaan divisi operasional.</p>
         </div>
-        <div class="flex items-center gap-2">
-            <button onclick="document.getElementById('add-member-form').scrollIntoView({behavior: 'smooth'})" class="btn btn-primary gap-2">
-                <span>➕</span> Tambah Anggota
-            </button>
-        </div>
+        {% if current_user.can_write %}
+            <div class="flex items-center gap-2">
+                <button onclick="document.getElementById('add-member-form').scrollIntoView({behavior: 'smooth'})" class="btn btn-primary gap-2">
+                    <span>➕</span> Tambah Anggota
+                </button>
+            </div>
+        {% endif %}
     </div>
 
     <!-- Add Member Form Card -->
+    {% if current_user.can_write %}
     <div id="add-member-form" class="card border-primary/20 bg-gradient-to-br from-card to-primary/5">
         <div class="card-header border-b pb-4">
             <h3 class="card-title text-lg flex items-center gap-2">
@@ -43,7 +46,6 @@
                         <label for="group_name" class="text-xs font-bold uppercase text-muted-foreground tracking-wider">Divisi</label>
                         <select id="group_name" name="group_name" required class="input focus:ring-primary/40">
                             <option value="INFRA">INFRA</option>
-                            <option value="CE">CE</option>
                             <option value="APPS">APPS</option>
                             <option value="MONITORING">MONITORING</option>
                         </select>
@@ -55,13 +57,13 @@
             </form>
         </div>
     </div>
+    {% endif %}
 
     <!-- Group Cards Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
         
         {% set groups = [
             ('INFRA', '🏗️', 'Infrastruktur & Jaringan', 'primary', members_infra),
-            ('CE', '📠', 'Customer Excellence', 'blue-500', members_ce),
             ('APPS', '📱', 'Applications & Systems', 'purple-500', members_apps),
             ('MONITORING', '👁️', 'Service Monitoring', 'teal-500', members_monitoring)
         ] %}
@@ -82,7 +84,9 @@
                         <tr class="bg-card/50 text-muted-foreground">
                             <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b whitespace-nowrap">Nama Anggota</th>
                             <th class="h-12 px-6 text-left font-bold uppercase tracking-widest border-b">Username</th>
-                            <th class="h-12 px-6 text-right font-bold uppercase tracking-widest border-b whitespace-nowrap">Aksi</th>
+                            {% if current_user.can_write %}
+                                <th class="h-12 px-6 text-right font-bold uppercase tracking-widest border-b whitespace-nowrap">Aksi</th>
+                            {% endif %}
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-{{ color }}/5">
@@ -90,23 +94,25 @@
                         <tr class="hover:bg-muted/50 transition-colors group/row">
                             <td class="p-6 align-middle font-bold text-foreground">{{ member.username }}</td>
                             <td class="p-6 align-middle font-mono text-muted-foreground text-[10px]">@{{ member.telegram_username }}</td>
-                            <td class="p-6 align-middle text-right">
-                                <div class="flex items-center justify-end gap-2">
-                                    <button type="button" class="btn btn-ghost h-8 w-8 p-0 edit-member-btn" 
-                                            data-user-id="{{ member.user_id }}"
-                                            data-username="{{ member.username|e }}"
-                                            data-telegram="{{ member.telegram_username|e }}"
-                                            data-group="{{ member.group_name or group_id }}">
-                                        <span>✏️</span>
-                                    </button>
-                                    <form method="POST" action="{{ url_for('delete_member', user_id=member.user_id) }}" 
-                                          onsubmit="return confirm('Hapus member {{ member.username }}?')">
-                                        <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:bg-red-50">
-                                            <span>🗑️</span>
+                            {% if current_user.can_write %}
+                                <td class="p-6 align-middle text-right">
+                                    <div class="flex items-center justify-end gap-2">
+                                        <button type="button" class="btn btn-ghost h-8 w-8 p-0 edit-member-btn" 
+                                                data-user-id="{{ member.user_id }}"
+                                                data-username="{{ member.username|e }}"
+                                                data-telegram="{{ member.telegram_username|e }}"
+                                                data-group="{{ member.group_name or group_id }}">
+                                            <span>✏️</span>
                                         </button>
-                                    </form>
-                                </div>
-                            </td>
+                                        <form method="POST" action="{{ url_for('delete_member', user_id=member.user_id) }}" 
+                                              onsubmit="return confirm('Hapus member {{ member.username }}?')">
+                                            <button type="submit" class="btn btn-ghost h-8 w-8 p-0 text-red-500 hover:bg-red-50">
+                                                <span>🗑️</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            {% endif %}
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -118,6 +124,7 @@
 </div>
 
 <!-- Edit Member Modal -->
+{% if current_user.can_write %}
 <div id="editMemberModal" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-black/60 backdrop-blur-md"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
@@ -145,7 +152,6 @@
                             <label for="edit_group_name" class="text-xs font-bold uppercase text-muted-foreground tracking-widest">Penugasan Divisi</label>
                             <select id="edit_group_name" name="group_name" required class="input focus:ring-primary/40 appearance-none bg-background">
                                 <option value="INFRA">INFRA</option>
-                                <option value="CE">CE</option>
                                 <option value="APPS">APPS</option>
                                 <option value="MONITORING">MONITORING</option>
                             </select>
@@ -160,8 +166,10 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <script>
+{% if current_user.can_write %}
 function showEditForm(userId, username, telegramUsername, groupName) {
     document.getElementById('edit_user_id').value = userId;
     document.getElementById('edit_username').value = username;
@@ -199,5 +207,6 @@ window.onclick = function(event) {
         closeEditModal();
     }
 }
+{% endif %}
 </script>
 {% endblock %}

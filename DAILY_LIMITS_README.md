@@ -8,7 +8,7 @@ This feature allows administrators to set flexible daily assignment limits for t
 ### 1. Flexible Daily Limits
 - Set different limits for different dates (e.g., Day 1: 1 person, Day 2: 2 people)
 - Default limit of 1 person per day when no specific limit is set
-- Priority over group-based quotas (INFRA/CE settings)
+- Priority over group-based quotas (INFRA/APPS/MONITORING settings)
 
 ### 2. Web Administration Interface
 Access the Daily Limits management through the web dashboard:
@@ -59,7 +59,7 @@ New table `daily_limits` stores:
 
 ## Priority System
 1. **Daily Limits** (Highest priority) - Specific date configurations
-2. **Group Quotas** (Fallback) - INFRA/CE group-based limits
+2. **Group Quotas** (Fallback) - INFRA/APPS/MONITORING group-based limits
 3. **Default** (Lowest) - 1 person per day when nothing else is set
 
 ## Testing

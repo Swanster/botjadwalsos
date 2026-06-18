@@ -32,7 +32,7 @@
                             <span class="text-[10px] text-muted-foreground font-normal">Min: 1, Max: 10</span>
                         </label>
                         <input type="number" id="kuota_infra" name="kuota_infra" min="1" max="10" 
-                               value="{{ settings.get('kuota_infra', {}).get('value', '2') }}" required 
+                               value="{{ settings.get('kuota_infra', {}).get('value', '1') }}" required 
                                class="input focus:ring-primary/50">
                         <p class="text-[10px] text-muted-foreground">Target jumlah personil standby per hari.</p>
                     </div>
@@ -45,40 +45,6 @@
                         <input type="number" id="max_hari_infra" name="max_hari_infra" min="1" max="31" 
                                value="{{ settings.get('max_hari_infra', {}).get('value', '10') }}" required 
                                class="input focus:ring-primary/50">
-                        <p class="text-[10px] text-muted-foreground">Batasan partisipasi member dalam 1 bulan.</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Divisi CE -->
-            <div class="card group hover:shadow-lg transition-all duration-300 border-blue-500/20">
-                <div class="card-header bg-blue-500/5 flex flex-row items-center gap-4">
-                    <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">📠</div>
-                    <div class="flex flex-col">
-                        <h3 class="text-lg font-bold leading-none">Divisi CE</h3>
-                        <p class="text-xs text-muted-foreground mt-1 text-blue-500">Customer Excellence</p>
-                    </div>
-                </div>
-                <div class="card-content p-6 space-y-6">
-                    <div class="space-y-2">
-                        <label for="kuota_ce" class="text-sm font-semibold flex items-center justify-between">
-                            <span>Kuota Harian</span>
-                            <span class="text-[10px] text-muted-foreground font-normal">Min: 1, Max: 10</span>
-                        </label>
-                        <input type="number" id="kuota_ce" name="kuota_ce" min="1" max="10" 
-                               value="{{ settings.get('kuota_ce', {}).get('value', '1') }}" required 
-                               class="input focus:ring-blue-500/50">
-                        <p class="text-[10px] text-muted-foreground">Target jumlah personil standby per hari.</p>
-                    </div>
-                    
-                    <div class="space-y-2">
-                        <label for="max_hari_ce" class="text-sm font-semibold flex items-center justify-between">
-                            <span>Maksimal Hari / Bulan</span>
-                            <span class="text-[10px] text-muted-foreground font-normal">Max: 31</span>
-                        </label>
-                        <input type="number" id="max_hari_ce" name="max_hari_ce" min="1" max="31" 
-                               value="{{ settings.get('max_hari_ce', {}).get('value', '31') }}" required 
-                               class="input focus:ring-blue-500/50">
                         <p class="text-[10px] text-muted-foreground">Batasan partisipasi member dalam 1 bulan.</p>
                     </div>
                 </div>

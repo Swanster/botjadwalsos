@@ -9,19 +9,29 @@ makassar_tz = pytz.timezone("Asia/Makassar")
 
 from config import DB_NAME
 
-GROUP_NAMES = ('INFRA', 'CE', 'APPS', 'MONITORING')
+GROUP_NAMES = ('INFRA', 'APPS', 'MONITORING')
+LEGACY_GROUP_ALIASES = {
+    'CE': 'INFRA',
+}
 GROUP_QUOTA_SETTING_KEYS = {
     'INFRA': 'kuota_infra',
-    'CE': 'kuota_ce',
     'APPS': 'kuota_apps',
     'MONITORING': 'kuota_monitoring',
 }
 GROUP_DEFAULT_QUOTAS = {
-    'INFRA': 2,
-    'CE': 1,
+    'INFRA': 1,
     'APPS': 1,
     'MONITORING': 1,
 }
+ADMIN_ROLES = ('super_admin', 'admin', 'user')
+
+def normalize_admin_role(role):
+    role = (role or 'user').strip().lower().replace(' ', '_').replace('-', '_')
+    return role if role in ADMIN_ROLES else 'user'
+
+def normalize_group_name(group_name):
+    group_name = (group_name or '').strip().upper()
+    return LEGACY_GROUP_ALIASES.get(group_name, group_name)
 
 def get_all_months_status():
     """Mengambil semua bulan yang pernah dibuka/ditutup dari status_bulanan."""
@@ -89,8 +99,9 @@ def create_tables():
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             telegram_username TEXT,
-            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'CE', 'APPS', 'MONITORING'))
+            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'APPS', 'MONITORING'))
         )''')
+        _ensure_user_groups_schema(cur)
         
         # --- TABEL SETTINGS (untuk kuota dinamis) ---
         cur.execute('''
@@ -106,8 +117,10 @@ def create_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'admin' CHECK(role IN ('super_admin', 'admin', 'user')),
             created_at TEXT NOT NULL
         )''')
+        _ensure_admin_users_role_column(cur)
         
         # --- TABEL DAILY LIMITS (untuk batasan per hari) ---
         cur.execute('''
@@ -128,17 +141,68 @@ def create_tables():
             description TEXT,
             timestamp TEXT NOT NULL
         )''')
+
+        _migrate_ce_to_infra(cur)
         
         conn.commit()
     print("Semua tabel (termasuk user_groups, settings, admin_users) berhasil diperiksa/dibuat.")
 
+def _ensure_admin_users_role_column(cur):
+    """Migrasi ringan untuk database lama yang belum punya kolom role."""
+    cur.execute("PRAGMA table_info(admin_users)")
+    columns = {row['name'] for row in cur.fetchall()}
+    if 'role' not in columns:
+        cur.execute("ALTER TABLE admin_users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
+
+def _ensure_user_groups_schema(cur):
+    """Pastikan constraint user_groups tidak lagi menerima team legacy CE."""
+    cur.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_groups'")
+    table = cur.fetchone()
+    if not table or "'CE'" not in (table['sql'] or ''):
+        return
+
+    cur.execute("DROP TABLE IF EXISTS user_groups_new")
+    cur.execute('''
+    CREATE TABLE user_groups_new (
+        user_id INTEGER PRIMARY KEY,
+        username TEXT,
+        telegram_username TEXT,
+        group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'APPS', 'MONITORING'))
+    )''')
+    cur.execute("""
+        INSERT INTO user_groups_new (user_id, username, telegram_username, group_name)
+        SELECT user_id, username, telegram_username,
+               CASE WHEN group_name = 'CE' THEN 'INFRA' ELSE group_name END
+        FROM user_groups
+    """)
+    cur.execute("DROP TABLE user_groups")
+    cur.execute("ALTER TABLE user_groups_new RENAME TO user_groups")
+
+def _migrate_ce_to_infra(cur):
+    """Migrasi legacy: team CE sudah merger ke INFRA."""
+    cur.execute("UPDATE user_groups SET group_name = 'INFRA' WHERE group_name = 'CE'")
+
+    cur.execute("SELECT value FROM settings WHERE key = 'ce_merged_to_infra'")
+    if cur.fetchone():
+        cur.execute("DELETE FROM settings WHERE key IN ('kuota_ce', 'max_hari_ce')")
+        return
+
+    cur.execute(
+        "INSERT OR REPLACE INTO settings (key, value, description) VALUES (?, ?, ?)",
+        ('ce_merged_to_infra', '1', 'Legacy CE sudah dimigrasikan ke INFRA')
+    )
+    cur.execute("DELETE FROM settings WHERE key IN ('kuota_ce', 'max_hari_ce')")
+
 def set_user_group(user_id, username, telegram_username, group_name):
-    """Menetapkan atau memperbarui grup (INFRA/CE) untuk seorang pengguna."""
+    """Menetapkan atau memperbarui grup untuk seorang pengguna."""
+    group_name = normalize_group_name(group_name)
+    if group_name not in GROUP_NAMES:
+        raise ValueError(f"Grup tidak valid: {group_name}")
     with connect_db() as conn:
         cur = conn.cursor()
         cur.execute(
             "INSERT OR REPLACE INTO user_groups (user_id, username, telegram_username, group_name) VALUES (?, ?, ?, ?)",
-            (user_id, username, telegram_username, group_name.upper())
+            (user_id, username, telegram_username, group_name)
         )
         conn.commit()
 
@@ -163,6 +227,7 @@ def get_jadwal_by_group(tahun, bulan, group_name):
     Username diambil dari user_groups sebagai sumber tunggal."""
     start_date = f"{tahun}-{bulan:02d}-01"
     end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
+    group_name = normalize_group_name(group_name)
     with connect_db() as conn:
         cur = conn.cursor()
         query = """
@@ -177,9 +242,10 @@ def get_jadwal_by_group(tahun, bulan, group_name):
 
 def get_all_users_in_group(group_name):
     """Mengambil semua data pengguna dalam grup tertentu."""
+    group_name = normalize_group_name(group_name)
     with connect_db() as conn:
         cur = conn.cursor()
-        cur.execute("SELECT user_id, username, telegram_username, group_name FROM user_groups WHERE group_name = ?", (group_name.upper(),))
+        cur.execute("SELECT user_id, username, telegram_username, group_name FROM user_groups WHERE group_name = ?", (group_name,))
         return cur.fetchall()
 
 def populate_default_config():
@@ -500,10 +566,8 @@ def get_all_settings():
 def init_default_settings():
     """Inisialisasi settings default jika belum ada."""
     defaults = [
-        ('kuota_infra', '2', 'Jumlah orang INFRA per hari'),
-        ('kuota_ce', '1', 'Jumlah orang CE per hari'),
+        ('kuota_infra', '1', 'Jumlah orang INFRA per hari'),
         ('max_hari_infra', '10', 'Maksimal hari standby per bulan untuk INFRA'),
-        ('max_hari_ce', '31', 'Maksimal hari standby per bulan untuk CE'),
         ('kuota_apps', '1', 'Jumlah orang APPS per hari'),
         ('max_hari_apps', '31', 'Maksimal hari standby per bulan untuk APPS'),
         ('kuota_monitoring', '1', 'Jumlah orang Monitoring per hari'),
@@ -584,17 +648,18 @@ def can_add_user_to_group_quota(user_id, tanggal):
 # ADMIN USER FUNCTIONS (untuk web dashboard login)
 # =============================================================================
 
-def add_admin_user(username, password):
-    """Menambahkan admin user baru dengan password ter-hash."""
+def add_admin_user(username, password, role='admin'):
+    """Menambahkan user dashboard baru dengan password ter-hash dan role."""
     import bcrypt
+    role = normalize_admin_role(role)
     password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     created_at = datetime.now(pytz.timezone("Asia/Makassar")).strftime('%Y-%m-%d %H:%M:%S')
     try:
         with connect_db() as conn:
             cur = conn.cursor()
             cur.execute(
-                "INSERT INTO admin_users (username, password_hash, created_at) VALUES (?, ?, ?)",
-                (username, password_hash, created_at)
+                "INSERT INTO admin_users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)",
+                (username, password_hash, role, created_at)
             )
             conn.commit()
             return True
@@ -616,7 +681,15 @@ def get_admin_by_username(username):
     """Mengambil data admin berdasarkan username."""
     with connect_db() as conn:
         cur = conn.cursor()
-        cur.execute("SELECT id, username, created_at FROM admin_users WHERE username = ?", (username,))
+        cur.execute("SELECT id, username, role, created_at FROM admin_users WHERE username = ?", (username,))
+        result = cur.fetchone()
+        return row_to_dict(result) if result else None
+
+def get_admin_by_id(admin_id):
+    """Mengambil data admin berdasarkan ID."""
+    with connect_db() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT id, username, role, created_at FROM admin_users WHERE id = ?", (admin_id,))
         result = cur.fetchone()
         return row_to_dict(result) if result else None
 
@@ -634,14 +707,39 @@ def get_all_admin_users():
     """Mengambil semua admin users (tanpa password)."""
     with connect_db() as conn:
         cur = conn.cursor()
-        cur.execute("SELECT id, username, created_at FROM admin_users")
+        cur.execute("SELECT id, username, role, created_at FROM admin_users ORDER BY id ASC")
         return [row_to_dict(row) for row in cur.fetchall()]
 
 def delete_admin_user(admin_id):
     """Menghapus admin user berdasarkan ID."""
     with connect_db() as conn:
         cur = conn.cursor()
+        cur.execute("SELECT role FROM admin_users WHERE id = ?", (admin_id,))
+        target = cur.fetchone()
+        if target and target['role'] == 'super_admin':
+            cur.execute("SELECT COUNT(*) FROM admin_users WHERE role = 'super_admin'")
+            if cur.fetchone()[0] <= 1:
+                return False
         cur.execute("DELETE FROM admin_users WHERE id = ?", (admin_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+def update_admin_role(admin_id, role):
+    """Memperbarui role user dashboard."""
+    role = normalize_admin_role(role)
+    with connect_db() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT role FROM admin_users WHERE id = ?", (admin_id,))
+        target = cur.fetchone()
+        if not target:
+            return False
+
+        if target['role'] == 'super_admin' and role != 'super_admin':
+            cur.execute("SELECT COUNT(*) FROM admin_users WHERE role = 'super_admin'")
+            if cur.fetchone()[0] <= 1:
+                return False
+
+        cur.execute("UPDATE admin_users SET role = ? WHERE id = ?", (role, admin_id))
         conn.commit()
         return cur.rowcount > 0
 
@@ -651,8 +749,17 @@ def init_default_admin():
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM admin_users")
         if cur.fetchone()[0] == 0:
-            add_admin_user('admin', 'admin123')
-            print("🔐 Default admin (admin/admin123) berhasil dibuat.")
+            add_admin_user('admin', 'admin123', 'super_admin')
+            print("🔐 Default super admin (admin/admin123) berhasil dibuat.")
+            return
+
+        cur.execute("SELECT COUNT(*) FROM admin_users WHERE role = 'super_admin'")
+        if cur.fetchone()[0] == 0:
+            cur.execute("UPDATE admin_users SET role = 'super_admin' WHERE username = 'admin'")
+            if cur.rowcount == 0:
+                cur.execute("UPDATE admin_users SET role = 'super_admin' WHERE id = (SELECT MIN(id) FROM admin_users)")
+            conn.commit()
+            print("🔐 Super admin default berhasil dipastikan.")
 
 # =============================================================================
 # JADWAL MANUAL FUNCTIONS (untuk input jadwal via web)

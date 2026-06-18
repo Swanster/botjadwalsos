@@ -169,16 +169,12 @@ def kirim_peringatan_jadwal_mingguan(bot):
 
     # Ambil jadwal yang sudah ada per grup
     jadwal_infra = get_jadwal_by_group(next_week_start.year, next_week_start.month, 'INFRA')
-    jadwal_ce = get_jadwal_by_group(next_week_start.year, next_week_start.month, 'CE')
     jadwal_apps = get_jadwal_by_group(next_week_start.year, next_week_start.month, 'APPS')
     jadwal_monitoring = get_jadwal_by_group(next_week_start.year, next_week_start.month, 'MONITORING')
 
     # Hitung slot terisi per hari untuk setiap grup
     slot_terisi_infra = defaultdict(int)
     for j in jadwal_infra: slot_terisi_infra[j['tanggal']] += 1
-
-    slot_terisi_ce = defaultdict(int)
-    for j in jadwal_ce: slot_terisi_ce[j['tanggal']] += 1
 
     slot_terisi_apps = defaultdict(int)
     for j in jadwal_apps: slot_terisi_apps[j['tanggal']] += 1
@@ -188,7 +184,6 @@ def kirim_peringatan_jadwal_mingguan(bot):
 
     # Cari tanggal yang kuotanya kurang
     tanggal_kurang_infra = []
-    tanggal_kurang_ce = []
     tanggal_kurang_apps = []
     tanggal_kurang_monitoring = []
     for i in range(7):
@@ -198,15 +193,12 @@ def kirim_peringatan_jadwal_mingguan(bot):
         # Cek jika tanggal berada di bulan yang sama dengan awal minggu
         if current_date.month == next_week_start.month:
             # Cek batasan harian (prioritas utama)
-            max_per_hari_infra = get_daily_limit(current_date_str, 2)
-            max_per_hari_ce = get_daily_limit(current_date_str, 1)
+            max_per_hari_infra = get_daily_limit(current_date_str, 1)
             max_per_hari_apps = get_daily_limit(current_date_str, 1)
             max_per_hari_monitoring = get_daily_limit(current_date_str, 1)
                 
             if slot_terisi_infra.get(current_date_str, 0) < max_per_hari_infra:
                 tanggal_kurang_infra.append(current_date_str)
-            if slot_terisi_ce.get(current_date_str, 0) < max_per_hari_ce:
-                tanggal_kurang_ce.append(current_date_str)
             if slot_terisi_apps.get(current_date_str, 0) < max_per_hari_apps:
                 tanggal_kurang_apps.append(current_date_str)
             if slot_terisi_monitoring.get(current_date_str, 0) < max_per_hari_monitoring:
@@ -215,7 +207,7 @@ def kirim_peringatan_jadwal_mingguan(bot):
     # Kirim peringatan ke anggota grup INFRA jika perlu
     if tanggal_kurang_infra:
         users_infra = get_all_users_in_group('INFRA')
-        pesan_infra = "🔔 *Peringatan Jadwal INFRA*\n\nJadwal standby Anda untuk beberapa tanggal di minggu depan masih belum terisi penuh (kuota: 2 orang/hari). Tanggal yang masih kosong:\n\n"
+        pesan_infra = "🔔 *Peringatan Jadwal INFRA*\n\nJadwal standby Anda untuk beberapa tanggal di minggu depan masih belum terisi penuh (kuota: 1 orang/hari). Tanggal yang masih kosong:\n\n"
         for tgl in tanggal_kurang_infra:
             tgl_obj = datetime.strptime(tgl, '%Y-%m-%d').date()
             pesan_infra += f"- {format_tanggal_indonesia(tgl_obj)}\n"
@@ -226,21 +218,6 @@ def kirim_peringatan_jadwal_mingguan(bot):
                 bot.send_message(user['user_id'], pesan_infra, parse_mode='Markdown')
             except Exception as e:
                 print(f"Gagal mengirim DM peringatan ke user INFRA {user['telegram_username']}: {e}")
-
-    # Kirim peringatan ke anggota grup CE jika perlu
-    if tanggal_kurang_ce:
-        users_ce = get_all_users_in_group('CE')
-        pesan_ce = "🔔 *Peringatan Jadwal CE*\n\nJadwal standby Anda untuk beberapa tanggal di minggu depan masih belum terisi penuh (kuota: 1 orang/hari). Tanggal yang masih kosong:\n\n"
-        for tgl in tanggal_kurang_ce:
-            tgl_obj = datetime.strptime(tgl, '%Y-%m-%d').date()
-            pesan_ce += f"- {format_tanggal_indonesia(tgl_obj)}\n"
-        pesan_ce += "\nMohon segera lengkapi jadwal Anda dengan menggunakan perintah `/start` di grup."
-
-        for user in users_ce:
-            try:
-                bot.send_message(user['user_id'], pesan_ce, parse_mode='Markdown')
-            except Exception as e:
-                print(f"Gagal mengirim DM peringatan ke user CE {user['telegram_username']}: {e}")
 
     # Kirim peringatan ke anggota grup APPS jika perlu
     if tanggal_kurang_apps:
@@ -272,7 +249,7 @@ def kirim_peringatan_jadwal_mingguan(bot):
             except Exception as e:
                 print(f"Gagal mengirim DM peringatan ke user MONITORING {user['telegram_username']}: {e}")
     
-    if not tanggal_kurang_infra and not tanggal_kurang_ce and not tanggal_kurang_apps and not tanggal_kurang_monitoring:
+    if not tanggal_kurang_infra and not tanggal_kurang_apps and not tanggal_kurang_monitoring:
         print("Scheduler: Jadwal minggu depan untuk semua grup sudah penuh.")
     
     print("Scheduler: Pengecekan peringatan jadwal mingguan selesai.")

@@ -15,12 +15,17 @@ def migrate_user_groups():
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             telegram_username TEXT,
-            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'CE', 'APPS', 'MONITORING'))
+            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'APPS', 'MONITORING'))
         )''')
         
         # 2. Copy data from the old table to the new one
         print("Copying data...")
-        cur.execute("INSERT INTO user_groups_new (user_id, username, telegram_username, group_name) SELECT user_id, username, telegram_username, group_name FROM user_groups")
+        cur.execute("""
+            INSERT INTO user_groups_new (user_id, username, telegram_username, group_name)
+            SELECT user_id, username, telegram_username,
+                   CASE WHEN group_name = 'CE' THEN 'INFRA' ELSE group_name END
+            FROM user_groups
+        """)
         
         # 3. Drop the old table
         print("Dropping old table...")

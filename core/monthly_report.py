@@ -3,14 +3,13 @@ from collections import defaultdict
 from datetime import date, datetime
 
 from core.database import (
+    GROUP_NAMES,
     format_tanggal_indonesia,
     get_all_users_in_group,
     get_group_quota_status_for_date,
     get_jadwal_for_month,
     get_weekend_monthly_limit_key,
 )
-
-GROUP_NAMES = ('INFRA', 'CE', 'APPS', 'MONITORING')
 NAMA_BULAN = {
     1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
     7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'

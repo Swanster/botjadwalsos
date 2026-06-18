@@ -8,7 +8,7 @@ Sheet "Jadwal" sekarang memiliki format:
 | Tanggal | Hari | Nama Anggota | Group |
 |---------|------|--------------|-------|
 | 2026-04-01 | Rabu | john_doe | INFRA |
-| 2026-04-01 | Rabu | jane_smith | CE |
+| 2026-04-01 | Rabu | jane_smith | INFRA |
 | 2026-04-02 | Kamis | bob_wilson | INFRA |
 
 ## 🗓️ Cara Membuat Calendar View
@@ -73,7 +73,6 @@ Sheet "Jadwal" sekarang memiliki format:
 2. Klik **Format** → **Conditional formatting**
 3. Buat rules:
    - **INFRA**: Background hijau
-   - **CE**: Background biru
    - **APPS**: Background kuning
    - **MONITORING**: Background merah
 
@@ -97,7 +96,7 @@ Data akan **otomatis terupdate** setiap:
 │  Tanggal    │  Hari   │ Nama Anggota │  Group   │
 ├─────────────┼─────────┼──────────────┼──────────┤
 │ 01 Apr 2026 │ Rabu    │ john_doe     │ INFRA    │
-│ 01 Apr 2026 │ Rabu    │ jane_smith   │ CE       │
+│ 01 Apr 2026 │ Rabu    │ jane_smith   │ INFRA    │
 │ 02 Apr 2026 │ Kamis   │ bob_wilson   │ INFRA    │
 │ 03 Apr 2026 │ Jumat   │ alice_brown  │ APPS     │
 └─────────────┴─────────┴──────────────┴──────────┘

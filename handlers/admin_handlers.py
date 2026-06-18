@@ -9,6 +9,7 @@ from collections import defaultdict
 
 from config import ADMIN_ID, GROUP_CHAT_ID, ALLOWED_TOPIC_ID
 from core.database import (
+    GROUP_NAMES, normalize_group_name,
     get_bulan_dibuka, get_bulan_dibuka_list, buka_bulan_baru, format_tanggal_indonesia, 
     get_jadwal_for_month, tutup_bulan_aktif, get_user_group, 
     get_user_by_telegram_username, set_user_group, get_all_months_status
@@ -232,9 +233,9 @@ def register_admin_handlers(bot: telebot.TeleBot):
                     user_id = int(row[0].strip())
                     username = row[1].strip()
                     telegram_username = row[2].strip().lstrip('@')
-                    group_name = row[3].strip().upper()
+                    group_name = normalize_group_name(row[3])
                     
-                    if group_name not in ['INFRA', 'CE', 'APPS', 'MONITORING']:
+                    if group_name not in GROUP_NAMES:
                         raise ValueError(f"Grup tidak valid: {group_name}")
 
                     # Simpan ke database

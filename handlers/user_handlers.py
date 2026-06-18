@@ -11,6 +11,7 @@ import time
 
 from config import ALLOWED_TOPIC_ID
 from core.database import (
+    GROUP_NAMES,
     get_bulan_dibuka, get_bulan_dibuka_list, get_konfigurasi, get_jadwal_for_month,
     get_user_absensi_in_range, set_user_absensi, update_user_jadwal_for_month,
     format_tanggal_indonesia, get_user_jadwal_for_month, get_jadwal_for_specific_date,
@@ -89,15 +90,12 @@ def create_calendar(mode, user_id, year, month):
         user_group = get_user_group(user_id)
         if not user_group:
             return "❌ Anda belum terdaftar di grup mana pun. Silakan hubungi admin."
-        jadwal_infra = get_jadwal_by_group(year, month, 'INFRA')
-        jadwal_ce = get_jadwal_by_group(year, month, 'CE')
-        jadwal_apps = get_jadwal_by_group(year, month, 'APPS')
-        slot_terisi_infra = defaultdict(int)
-        for j in jadwal_infra: slot_terisi_infra[j['tanggal']] += 1
-        slot_terisi_ce = defaultdict(int)
-        for j in jadwal_ce: slot_terisi_ce[j['tanggal']] += 1
-        slot_terisi_apps = defaultdict(int)
-        for j in jadwal_apps: slot_terisi_apps[j['tanggal']] += 1
+        slot_terisi_by_group = {}
+        for group_name in GROUP_NAMES:
+            slot_terisi = defaultdict(int)
+            for j in get_jadwal_by_group(year, month, group_name):
+                slot_terisi[j['tanggal']] += 1
+            slot_terisi_by_group[group_name] = slot_terisi
         absensi_user = get_user_absensi_in_range(user_id, start_of_month, end_of_month)
     elif mode == 'cuti':
         pilihan_sementara = user_cuti_selections.get(user_id, {}).get('choices', set())
@@ -150,12 +148,7 @@ def create_calendar(mode, user_id, year, month):
                     
                     # Cek batasan harian (prioritas utama)
                     max_per_hari = get_daily_limit(current_date_str, 1)  # Default 1 jika tidak ada setting
-                    if user_group == 'INFRA':
-                        jumlah_terisi = slot_terisi_infra.get(current_date_str, 0)
-                    elif user_group == 'CE':
-                        jumlah_terisi = slot_terisi_ce.get(current_date_str, 0)
-                    else: # APPS
-                        jumlah_terisi = slot_terisi_apps.get(current_date_str, 0)
+                    jumlah_terisi = slot_terisi_by_group.get(user_group, {}).get(current_date_str, 0)
                     
                     is_penuh = jumlah_terisi >= max_per_hari
                     is_weekend_terkunci = is_weekend_monthly_locked(current_date_str, pilihan_sementara)
@@ -240,7 +233,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         user_id = user.id
         user_group = get_user_group(user_id)
         if not user_group:
-            bot.send_message(chat_id, "❌ Akun Anda belum terdaftar di grup manapun (INFRA/CE/APPS). Silakan hubungi Admin untuk didaftarkan.", message_thread_id=thread_id)
+            bot.send_message(chat_id, "❌ Akun Anda belum terdaftar di grup manapun (INFRA/APPS/MONITORING). Silakan hubungi Admin untuk didaftarkan.", message_thread_id=thread_id)
             return
 
         jadwal_bulan_ini = get_jadwal_for_month(tahun, bulan)
@@ -574,12 +567,13 @@ def register_user_handlers(bot: telebot.TeleBot):
 
                     # --- LOGIKA LAMA: Batasan dinamis per grup dari database ---
                     user_group = get_user_group(user_id)
-                    if user_group == 'INFRA':
-                        max_hari = int(get_setting('max_hari_infra', '10'))
-                    elif user_group == 'CE':
-                        max_hari = int(get_setting('max_hari_ce', '31'))
-                    else: # APPS
-                        max_hari = int(get_setting('max_hari_apps', '31'))
+                    max_hari_keys = {
+                        'INFRA': ('max_hari_infra', '10'),
+                        'APPS': ('max_hari_apps', '31'),
+                        'MONITORING': ('max_hari_monitoring', '31'),
+                    }
+                    max_hari_key, max_hari_default = max_hari_keys.get(user_group, ('max_hari_apps', '31'))
+                    max_hari = int(get_setting(max_hari_key, max_hari_default))
                     # Hitung pilihan saat ini di bulan yang sama dengan tanggal yang akan ditambahkan
                     dt_obj_toggle = datetime.strptime(date_str, '%Y-%m-%d')
                     pilihan_bulan_ini = {s for s in selections if datetime.strptime(s, '%Y-%m-%d').month == dt_obj_toggle.month}

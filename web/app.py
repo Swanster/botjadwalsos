@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.database import (
     verify_admin, get_admin_by_username, update_admin_password, get_all_admin_users,
-    add_admin_user, delete_admin_user,
+    add_admin_user, delete_admin_user, update_admin_role,
     get_all_users_in_group, set_user_group, get_user_group, delete_user_from_group,
     get_jadwal_for_month, get_jadwal_for_specific_date, add_jadwal_manual, delete_jadwal_by_id,
     get_bulan_dibuka, format_tanggal_indonesia,
@@ -45,17 +45,52 @@ def create_app():
     login_manager.login_view = 'login'
     login_manager.login_message = 'Silakan login untuk mengakses halaman ini.'
     
+    ROLE_LABELS = {
+        'super_admin': 'Super Admin',
+        'admin': 'Admin',
+        'user': 'User',
+    }
+    WRITE_ROLES = ('super_admin', 'admin')
+
     class User(UserMixin):
-        def __init__(self, username):
+        def __init__(self, username, role='user'):
             self.id = username
             self.username = username
+            self.role = role or 'user'
+
+        @property
+        def role_label(self):
+            return ROLE_LABELS.get(self.role, 'User')
+
+        @property
+        def is_super_admin(self):
+            return self.role == 'super_admin'
+
+        @property
+        def can_write(self):
+            return self.role in WRITE_ROLES
     
     @login_manager.user_loader
     def load_user(username):
         admin = get_admin_by_username(username)
         if admin:
-            return User(admin['username'])
+            return User(admin['username'], admin.get('role', 'user'))
         return None
+
+    def role_required(*allowed_roles):
+        def decorator(view_func):
+            @wraps(view_func)
+            @login_required
+            def wrapped(*args, **kwargs):
+                if current_user.role not in allowed_roles:
+                    flash('Akses ditolak untuk role Anda.', 'error')
+                    return redirect(url_for('dashboard'))
+                return view_func(*args, **kwargs)
+            return wrapped
+        return decorator
+
+    def write_required(view_func):
+        return role_required(*WRITE_ROLES)(view_func)
 
     # =============================================================================
     # ROUTES - AUTH
@@ -72,7 +107,7 @@ def create_app():
 
             admin = verify_admin(username, password)
             if admin:
-                user = User(admin['username'])
+                user = User(admin['username'], admin.get('role', 'user'))
                 login_user(user)
                 add_audit_log(username, 'LOGIN', 'Berhasil login ke dashboard web')
                 flash('Login berhasil!', 'success')
@@ -91,10 +126,9 @@ def create_app():
 
         # Build member lookup for group info
         members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
-        members_ce = [dict(m) for m in get_all_users_in_group('CE')]
         members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
         members_monitoring = [dict(m) for m in get_all_users_in_group('MONITORING')]
-        all_members = members_infra + members_ce + members_apps + members_monitoring
+        all_members = members_infra + members_apps + members_monitoring
 
         # Create user_id to group_name mapping
         user_group_map = {}
@@ -177,7 +211,6 @@ def create_app():
         
         # Get all members
         members_infra = get_all_users_in_group('INFRA')
-        members_ce = get_all_users_in_group('CE')
         members_apps = get_all_users_in_group('APPS')
         members_monitoring = get_all_users_in_group('MONITORING')
         
@@ -190,7 +223,6 @@ def create_app():
             jadwal_hari_ini=jadwal_hari_ini,
             jadwal_bulan_ini=jadwal_bulan_ini,
             members_infra=members_infra,
-            members_ce=members_ce,
             members_apps=members_apps,
             members_monitoring=members_monitoring,
             bulan_dibuka=bulan_dibuka
@@ -230,18 +262,16 @@ def create_app():
     @login_required
     def members():
         members_infra = get_all_users_in_group('INFRA')
-        members_ce = get_all_users_in_group('CE')
         members_apps = get_all_users_in_group('APPS')
         members_monitoring = get_all_users_in_group('MONITORING')
         return render_template('members.html', 
             members_infra=members_infra, 
-            members_ce=members_ce,
             members_apps=members_apps,
             members_monitoring=members_monitoring
         )
     
     @app.route('/members/add', methods=['POST'])
-    @login_required
+    @write_required
     def add_member():
         user_id = request.form.get('user_id', '').strip()
         username = request.form.get('username', '').strip()
@@ -262,7 +292,7 @@ def create_app():
         return redirect(url_for('members'))
     
     @app.route('/members/<int:user_id>/update', methods=['POST'])
-    @login_required
+    @write_required
     def update_member(user_id):
         username = request.form.get('username', '').strip()
         telegram_username = request.form.get('telegram_username', '').strip()
@@ -273,7 +303,7 @@ def create_app():
         return redirect(url_for('members'))
     
     @app.route('/members/<int:user_id>/delete', methods=['POST'])
-    @login_required
+    @write_required
     def delete_member(user_id):
         if delete_user_from_group(user_id):
             flash('Member berhasil dihapus.', 'success')
@@ -297,10 +327,9 @@ def create_app():
 
         # Build member lookup for group info
         members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
-        members_ce = [dict(m) for m in get_all_users_in_group('CE')]
         members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
         members_monitoring = [dict(m) for m in get_all_users_in_group('MONITORING')]
-        all_members = members_infra + members_ce + members_apps + members_monitoring
+        all_members = members_infra + members_apps + members_monitoring
 
         assignment_counts = {}
         for jadwal in jadwal_list:
@@ -362,7 +391,7 @@ def create_app():
         )
     
     @app.route('/schedules/add', methods=['POST'])
-    @login_required
+    @write_required
     def add_schedule():
         user_id = request.form.get('user_id', '').strip()
         tanggal = request.form.get('tanggal', '').strip()
@@ -386,10 +415,9 @@ def create_app():
             
             # Get username from members - convert sqlite3.Row to dict
             members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
-            members_ce = [dict(m) for m in get_all_users_in_group('CE')]
             members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
             members_monitoring = [dict(m) for m in get_all_users_in_group('MONITORING')]
-            members = members_infra + members_ce + members_apps + members_monitoring
+            members = members_infra + members_apps + members_monitoring
             
             username = ''
             telegram_username = ''
@@ -436,7 +464,7 @@ def create_app():
         return redirect(url_for('schedules'))
     
     @app.route('/schedules/<int:jadwal_id>/delete', methods=['POST'])
-    @login_required
+    @write_required
     def delete_schedule(jadwal_id):
         if delete_jadwal_by_id(jadwal_id):
             add_audit_log(current_user.username, 'DELETE_SCHEDULE', f'Menghapus jadwal dengan ID {jadwal_id}')
@@ -482,22 +510,23 @@ def create_app():
         return render_template('password.html')
     
     @app.route('/admins')
-    @login_required
+    @role_required('super_admin')
     def admins():
         admin_list = get_all_admin_users()
         return render_template('admins.html', admins=admin_list)
     
     @app.route('/logs')
-    @login_required
+    @write_required
     def logs():
         recent_logs = get_audit_logs(limit=200)
         return render_template('logs.html', logs=recent_logs)
     
     @app.route('/admins/add', methods=['POST'])
-    @login_required
+    @role_required('super_admin')
     def add_admin():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
+        role = request.form.get('role', 'user').strip()
         
         if not username or not password:
             flash('Username dan password wajib diisi.', 'error')
@@ -507,24 +536,46 @@ def create_app():
             flash('Password minimal 6 karakter.', 'error')
             return redirect(url_for('admins'))
         
-        if add_admin_user(username, password):
-            flash(f'Admin {username} berhasil ditambahkan.', 'success')
+        if add_admin_user(username, password, role):
+            flash(f'User {username} berhasil ditambahkan.', 'success')
         else:
             flash(f'Username {username} sudah ada.', 'error')
         
         return redirect(url_for('admins'))
     
     @app.route('/admins/<int:admin_id>/delete', methods=['POST'])
-    @login_required
+    @role_required('super_admin')
     def delete_admin(admin_id):
+        target = next((a for a in get_all_admin_users() if a['id'] == admin_id), None)
+        if target and target['username'] == current_user.username:
+            flash('Tidak bisa menghapus akun yang sedang digunakan.', 'error')
+            return redirect(url_for('admins'))
+
         if delete_admin_user(admin_id):
-            flash('Admin berhasil dihapus.', 'success')
+            flash('User berhasil dihapus.', 'success')
         else:
-            flash('Gagal menghapus admin.', 'error')
+            flash('Gagal menghapus user. Pastikan masih ada minimal satu Super Admin.', 'error')
+        return redirect(url_for('admins'))
+
+    @app.route('/admins/<int:admin_id>/role', methods=['POST'])
+    @role_required('super_admin')
+    def update_admin_role_route(admin_id):
+        role = request.form.get('role', 'user').strip()
+        target = next((a for a in get_all_admin_users() if a['id'] == admin_id), None)
+
+        if target and target['username'] == current_user.username and role != 'super_admin':
+            flash('Tidak bisa menurunkan role akun yang sedang digunakan.', 'error')
+            return redirect(url_for('admins'))
+
+        if update_admin_role(admin_id, role):
+            add_audit_log(current_user.username, 'UPDATE_USER_ROLE', f'Memperbarui role user ID {admin_id} menjadi {role}')
+            flash('Role user berhasil diperbarui.', 'success')
+        else:
+            flash('Gagal memperbarui role. Pastikan masih ada minimal satu Super Admin.', 'error')
         return redirect(url_for('admins'))
     
     @app.route('/admins/<int:admin_id>/reset', methods=['POST'])
-    @login_required
+    @role_required('super_admin')
     def reset_admin_password(admin_id):
         new_password = request.form.get('new_password', '').strip()
         
@@ -552,13 +603,13 @@ def create_app():
     # =============================================================================
     
     @app.route('/settings', methods=['GET', 'POST'])
-    @login_required
+    @write_required
     def settings():
         if request.method == 'POST':
             # Update all settings from form
             keys = [
-                'kuota_infra', 'kuota_ce', 'kuota_apps', 'kuota_monitoring',
-                'max_hari_infra', 'max_hari_ce', 'max_hari_apps', 'max_hari_monitoring'
+                'kuota_infra', 'kuota_apps', 'kuota_monitoring',
+                'max_hari_infra', 'max_hari_apps', 'max_hari_monitoring'
             ]
             
             for key in keys:
@@ -579,7 +630,7 @@ def create_app():
     # =============================================================================
     
     @app.route('/daily-limits', methods=['GET', 'POST'])
-    @login_required
+    @write_required
     def daily_limits():
         if request.method == 'POST':
             # Check if this is bulk monthly setting
@@ -616,7 +667,7 @@ def create_app():
         return render_template('daily_limits.html', limits=limits, current_year=current_year)
     
     @app.route('/daily-limits/<tanggal>/delete', methods=['POST'])
-    @login_required
+    @write_required
     def delete_daily_limit_route(tanggal):
         if delete_daily_limit(tanggal):
             flash(f'Batasan untuk tanggal {tanggal} berhasil dihapus.', 'success')
@@ -669,7 +720,7 @@ def create_app():
     # =============================================================================
 
     @app.route('/google-sheets')
-    @login_required
+    @write_required
     def google_sheets():
         """Halaman status Google Sheets integration."""
         client = get_google_sheets_client()
@@ -681,7 +732,7 @@ def create_app():
                              sheet_url=sheet_url)
 
     @app.route('/google-sheets/sync-all', methods=['POST'])
-    @login_required
+    @write_required
     def sync_all_to_sheets():
         """Full sync semua data jadwal dan absensi ke Google Sheets (hanya bulan berjalan)."""
         try:
