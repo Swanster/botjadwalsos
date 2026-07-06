@@ -1,6 +1,7 @@
 # core/scheduler.py (Versi Final dengan Laporan & Pengingat Cuti)
 
 import time
+import calendar
 import pytz
 from datetime import datetime, timedelta
 from functools import wraps
@@ -14,7 +15,7 @@ from core.database import (
     get_all_registered_users, get_users_with_schedule_in_range,
     is_date_full, get_daily_limit, get_assignment_count_for_date,
     can_user_take_weekend_date, get_user_jadwal_for_month,
-    get_weekend_monthly_limit_key
+    get_weekend_monthly_limit_key, get_bulan_dibuka
 )
 from core.monthly_report import build_monthly_report, format_monthly_report_for_telegram
 from core.schedule_recap import generate_rekap_text
@@ -254,62 +255,118 @@ def kirim_peringatan_jadwal_mingguan(bot):
     
     print("Scheduler: Pengecekan peringatan jadwal mingguan selesai.")
     
+def _format_user_mention(user):
+    if user['telegram_username']:
+        return f"@{user['telegram_username']}"
+    return f"[{user['username']}](tg://user?id={user['user_id']})"
+
+
+def _get_open_schedule_period():
+    bulan_dibuka = get_bulan_dibuka()
+    if bulan_dibuka:
+        tahun = bulan_dibuka['tahun']
+        bulan = bulan_dibuka['bulan']
+        return tahun, bulan, f"{tahun}-{bulan:02d}-01", f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
+
+    tz = pytz.timezone("Asia/Makassar")
+    today = datetime.now(tz).date()
+    next_week_start = today + timedelta(days=(7 - today.weekday()))
+    next_week_end = next_week_start + timedelta(days=6)
+    return next_week_start.year, next_week_start.month, next_week_start.strftime('%Y-%m-%d'), next_week_end.strftime('%Y-%m-%d')
+
+
+def build_pesan_peringatan_pengisian_jadwal():
+    """Build pesan peringatan pengisian jadwal tanpa mengirim Telegram."""
+    tahun, bulan, start_str, end_str = _get_open_schedule_period()
+    start_date = datetime.strptime(start_str, '%Y-%m-%d').date()
+    end_date = datetime.strptime(end_str, '%Y-%m-%d').date()
+
+    tanggal_kosong = []
+    current_date = start_date
+    while current_date <= end_date:
+        tanggal = current_date.strftime('%Y-%m-%d')
+        terisi = get_assignment_count_for_date(tanggal)
+        limit = get_daily_limit(tanggal, 1)
+        if terisi < limit:
+            tanggal_kosong.append((current_date, terisi, limit))
+        current_date += timedelta(days=1)
+
+    kurang_isi_by_group = {}
+    for group_name in ('INFRA', 'APPS', 'MONITORING'):
+        entries = []
+        for user in get_all_users_in_group(group_name):
+            jadwal_bulan = get_user_jadwal_for_month(user['user_id'], tahun, bulan)
+            total = len(jadwal_bulan)
+            if total in (1, 2):
+                entries.append((total, user))
+        kurang_isi_by_group[group_name] = sorted(entries, key=lambda item: (item[0], item[1]['username'].lower()))
+
+    if not tanggal_kosong and not any(kurang_isi_by_group.values()):
+        return None
+
+    nama_bulan = format_tanggal_indonesia(start_date).split(' ')[1]
+    pesan = (
+        "🔔 *Peringatan Pengisian Jadwal SOS*\n\n"
+        f"Periode: *{nama_bulan} {tahun}*\n"
+        "Target: setiap anggota melengkapi jadwal sampai *3x* jika slot masih tersedia.\n\n"
+    )
+
+    if tanggal_kosong:
+        pesan += "📅 *Tanggal yang masih belum terisi penuh:*\n"
+        for tanggal_obj, terisi, limit in tanggal_kosong[:12]:
+            pesan += f"• {format_tanggal_indonesia(tanggal_obj)} — {terisi}/{limit}\n"
+        if len(tanggal_kosong) > 12:
+            pesan += f"• ...dan {len(tanggal_kosong) - 12} tanggal lainnya\n"
+        pesan += "\n"
+    else:
+        pesan += "✅ Semua tanggal pada periode ini sudah terisi penuh.\n\n"
+
+    pesan += "👥 *Anggota yang jadwalnya belum 3x:*\n"
+    has_members = False
+    for group_name, entries in kurang_isi_by_group.items():
+        if not entries:
+            continue
+        has_members = True
+        pesan += f"\n*{group_name}*\n"
+        for total, user in entries:
+            kurang = 3 - total
+            pesan += f"• {_format_user_mention(user)} — baru *{total}x*, kurang *{kurang}x*\n"
+
+    if not has_members:
+        pesan += "Semua anggota sudah minimal 3x.\n"
+
+    if tanggal_kosong:
+        pesan += (
+            "\nSilakan anggota yang baru isi 1x atau 2x mengambil tanggal kosong di atas "
+            "melalui `/start`."
+        )
+    else:
+        pesan += (
+            "\nSaat ini belum ada tanggal kosong di periode aktif. Jika ada slot dibuka lagi, "
+            "anggota di atas menjadi prioritas untuk melengkapi jadwal."
+        )
+    return pesan
+
+
 @retry_on_failure(retries=3, delay=60)
 def kirim_peringatan_jadwal_mingguan_kosong(bot):
     """
-    Setiap Sabtu, me-mention pengguna yang sama sekali belum mengisi
-    jadwal untuk minggu depan.
+    Mention anggota yang baru isi 1x/2x dan tampilkan tanggal kosong periode aktif.
     """
-    print("Scheduler: Mengecek pengguna yang belum input jadwal untuk minggu depan...")
-    tz = pytz.timezone("Asia/Makassar")
-    today = datetime.now(tz).date()
+    print("Scheduler: Mengecek anggota yang belum melengkapi 3x jadwal...")
+    pesan = build_pesan_peringatan_pengisian_jadwal()
 
-    # Tentukan periode minggu depan (Senin hingga Minggu)
-    next_week_start = today + timedelta(days=(7 - today.weekday()))
-    next_week_end = next_week_start + timedelta(days=6)
-    
-    start_str = next_week_start.strftime('%Y-%m-%d')
-    end_str = next_week_end.strftime('%Y-%m-%d')
-
-    # Dapatkan semua pengguna terdaftar dan yang sudah mengisi jadwal
-    all_users = get_all_registered_users()
-    users_sudah_isi = get_users_with_schedule_in_range(start_str, end_str)
-
-    # Cari siapa saja yang belum mengisi
-    users_belum_isi = []
-    for user in all_users:
-        if user['user_id'] not in users_sudah_isi:
-            users_belum_isi.append(user)
-    
-    if not users_belum_isi:
-        print("Scheduler: Semua pengguna sudah mengisi jadwal minggu depan. Peringatan dilewati.")
+    if not pesan:
+        print("Scheduler: Tidak ada anggota/tanggal yang perlu diperingatkan.")
         return
 
-    # Buat pesan dengan mention
-    pesan = (f"🔔 *Peringatan Pengisian Jadwal*\n\n"
-             f"Mohon perhatiannya untuk segera mengisi jadwal standby minggu depan "
-             f"({next_week_start.day} - {next_week_end.day} {format_tanggal_indonesia(next_week_end).split(' ')[1]}).\n\n"
-             f"Anggota yang belum mengisi:\n")
-
-    mentions = []
-    for user in users_belum_isi:
-        # Gunakan telegram_username jika ada, jika tidak, buat mention dari user_id
-        if user['telegram_username']:
-            mentions.append(f"• @{user['telegram_username']}")
-        else:
-            # Fallback jika tidak ada username, mention dengan nama "pengguna"
-            mentions.append(f"• [pengguna](tg://user?id={user['user_id']})")
-            
-    pesan += '\n'.join(mentions)
-    pesan += "\n\nSilakan gunakan perintah `/start` untuk mengisi."
-    
     bot.send_message(
         chat_id=GROUP_CHAT_ID,
         text=pesan,
         parse_mode='Markdown',
         message_thread_id=ALLOWED_TOPIC_ID
     )
-    print("Scheduler: Peringatan mingguan (mention) berhasil dikirim.")
+    print("Scheduler: Peringatan pengisian jadwal berhasil dikirim.")
 
 
 @retry_on_failure(retries=3, delay=60)

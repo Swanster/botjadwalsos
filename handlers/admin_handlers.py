@@ -42,7 +42,8 @@ def register_admin_handlers(bot: telebot.TeleBot):
             f"Periode pengisian jadwal standby untuk bulan *{nama_bulan_full} {tahun}* sudah dibuka.\n\n"
             f"Silakan isi jadwal melalui perintah /start.\n\n"
             f"📌 *Catatan aturan jadwal:*\n"
-            f"- Maksimal 2 jadwal weekday sebelum memilih minimal 1 jadwal weekend.\n"
+            f"- Setiap orang maksimal 2 jadwal weekday setiap bulan.\n"
+            f"- Jika semua slot weekend team sudah penuh, boleh fallback maksimal 3 weekday.\n"
             f"- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
             f"- Tukar jadwal harus tipe hari yang sama: weekday dengan weekday, weekend dengan weekend."
         )

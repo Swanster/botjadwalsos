@@ -16,13 +16,14 @@ from core.database import (
     verify_admin, get_admin_by_username, update_admin_password, get_all_admin_users,
     add_admin_user, delete_admin_user, update_admin_role,
     get_all_users_in_group, set_user_group, get_user_group, delete_user_from_group,
-    get_jadwal_for_month, get_jadwal_for_specific_date, add_jadwal_manual, delete_jadwal_by_id,
+    get_jadwal_for_month, get_user_jadwal_for_month, get_jadwal_for_specific_date, add_jadwal_manual, delete_jadwal_by_id,
     get_bulan_dibuka, format_tanggal_indonesia,
     create_tables, init_default_admin,
     set_daily_limit, get_all_daily_limits, delete_daily_limit, get_daily_limit,
     is_date_full, add_audit_log, get_audit_logs,
     get_all_settings, set_setting, can_user_take_weekend_date,
-    get_group_quota_status_for_date, can_add_user_to_group_quota
+    get_group_quota_status_for_date, can_add_user_to_group_quota,
+    is_weekend_fallback_active_for_user, validate_weekday_weekend_balance
 )
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets, get_google_sheets_client
 from core.monthly_report import build_monthly_report
@@ -438,13 +439,22 @@ def create_app():
                 flash(f'❌ {username} sudah memiliki jadwal {hari} di bulan ini. Maksimal 1 {hari} per bulan.', 'error')
                 return redirect(url_for('schedules'))
             
+            target_date = datetime.strptime(tanggal, '%Y-%m-%d').date()
+            current_month_dates = [row['tanggal'] for row in get_user_jadwal_for_month(user_id, target_date.year, target_date.month)]
+            if tanggal not in current_month_dates:
+                current_month_dates.append(tanggal)
+            weekend_full = is_weekend_fallback_active_for_user(user_id, target_date.year, target_date.month)
+            balance_valid, balance_error = validate_weekday_weekend_balance(current_month_dates, weekend_full=weekend_full)
+            if not balance_valid:
+                flash(f'❌ {balance_error}', 'error')
+                return redirect(url_for('schedules'))
+
             if add_jadwal_manual(user_id, username, telegram_username, tanggal):
                 add_audit_log(current_user.username, 'ADD_SCHEDULE', f'Menambah jadwal manual untuk {username} ({user_id}) pada tanggal {tanggal}')
 
                 # Sync ke Google Sheets
                 user_group = get_user_group(user_id)
                 hari_map = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'Sabtu', 6: 'Minggu'}
-                from datetime import datetime
                 hari = hari_map[datetime.strptime(tanggal, '%Y-%m-%d').weekday()]
                 sync_jadwal_to_sheets(
                     tanggal=tanggal,

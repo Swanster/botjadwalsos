@@ -275,7 +275,8 @@ def update_user_jadwal_for_month(user_id, first_name, telegram_username, list_of
             cur = conn.cursor()
             cur.execute("BEGIN TRANSACTION;")
             weekend_valid, error_message = validate_weekend_monthly_limits(list_of_tanggal)
-            balance_valid, balance_error = validate_weekday_weekend_balance(list_of_tanggal)
+            weekend_full = is_weekend_fallback_active_for_user(user_id, tahun, bulan)
+            balance_valid, balance_error = validate_weekday_weekend_balance(list_of_tanggal, weekend_full=weekend_full)
             if not weekend_valid or not balance_valid:
                 error_message = error_message or balance_error
                 raise ValueError(error_message)
@@ -804,7 +805,8 @@ def add_jadwal_manual(user_id, username, telegram_username, tanggal):
             tanggal_list = [row['tanggal'] for row in cur.fetchall()]
             if tanggal not in tanggal_list:
                 tanggal_list.append(tanggal)
-            balance_valid, _ = validate_weekday_weekend_balance(tanggal_list)
+            weekend_full = is_weekend_fallback_active_for_user(user_id, target_date.year, target_date.month)
+            balance_valid, _ = validate_weekday_weekend_balance(tanggal_list, weekend_full=weekend_full)
             if not balance_valid:
                 return False
             cur.execute(
@@ -898,23 +900,92 @@ def validate_weekend_monthly_limits(list_of_tanggal, limit=1):
             return False, f"Maksimal {limit} {nama_hari} per bulan."
     return True, None
 
-def validate_weekday_weekend_balance(list_of_tanggal, weekday_limit=2):
-    """Pastikan user mengambil weekend setelah tiap 2 jadwal weekday dalam bulan yang sama."""
+def validate_weekday_weekend_balance(list_of_tanggal, weekday_limit=2, weekend_full=False):
+    """Pastikan tiap user maksimal mengambil weekday sesuai kondisi bulan.
+
+    Weekend divalidasi terpisah oleh validate_weekend_monthly_limits().
+    Normal: maksimal 2 weekday. Fallback: jika slot weekend sudah penuh, user boleh
+    mengambil 3 weekday agar tetap bisa memenuhi jadwal.
+    """
+    effective_weekday_limit = 3 if weekend_full else weekday_limit
     monthly_counts = {}
     for tanggal in list_of_tanggal:
         tanggal_obj = datetime.strptime(tanggal, '%Y-%m-%d').date()
         month_key = (tanggal_obj.year, tanggal_obj.month)
-        counts = monthly_counts.setdefault(month_key, {'weekday': 0, 'weekend': 0})
-        if get_weekend_monthly_limit_key(tanggal):
-            counts['weekend'] += 1
-        else:
+        counts = monthly_counts.setdefault(month_key, {'weekday': 0})
+        if not get_weekend_monthly_limit_key(tanggal):
             counts['weekday'] += 1
 
     for counts in monthly_counts.values():
-        allowed_weekdays = (counts['weekend'] + 1) * weekday_limit
-        if counts['weekday'] > allowed_weekdays:
-            return False, f"Anda sudah memilih {weekday_limit} jadwal weekday. Pilih minimal 1 jadwal weekend dulu sebelum menambah weekday lagi."
+        if counts['weekday'] > effective_weekday_limit:
+            return False, f"Anda sudah memilih maksimal {effective_weekday_limit} jadwal weekday bulan ini."
     return True, None
+
+def are_weekend_slots_full_for_group(tahun, bulan, group_name):
+    """Cek apakah slot weekend yang masih bisa dipilih user sudah habis untuk group.
+
+    Fallback 3 weekday aktif jika semua tipe weekend (Sabtu dan Minggu) sudah tidak
+    punya tanggal kosong lagi untuk group pada bulan tersebut. Tidak harus semua
+    tanggal weekend penuh; cukup semua tipe weekend tidak tersedia.
+    """
+    group_name = normalize_group_name(group_name)
+    if group_name not in GROUP_NAMES:
+        return False
+
+    weekend_availability = {5: False, 6: False}
+    for day in range(1, calendar.monthrange(tahun, bulan)[1] + 1):
+        tanggal_obj = datetime(tahun, bulan, day).date()
+        weekday = tanggal_obj.weekday()
+        if weekday not in weekend_availability:
+            continue
+
+        tanggal = tanggal_obj.strftime('%Y-%m-%d')
+        limit = get_group_quota(group_name)
+        current = get_group_assignment_count_for_date(tanggal, group_name)
+        if current < limit:
+            weekend_availability[weekday] = True
+
+    return not any(weekend_availability.values())
+
+def is_weekend_fallback_active_for_user(user_id, tahun, bulan):
+    """Cek apakah user boleh fallback 3 weekday karena tipe weekend jatahnya habis.
+
+    Jika user sudah punya Sabtu, maka hanya Minggu yang relevan. Jika user sudah punya
+    Minggu, maka hanya Sabtu yang relevan. Fallback aktif saat semua tipe weekend yang
+    masih boleh diambil user sudah tidak punya slot kosong secara global harian.
+    """
+    start_date = f"{tahun}-{bulan:02d}-01"
+    end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
+    with connect_db() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
+            (user_id, start_date, end_date)
+        )
+        user_weekend_types = set()
+        for row in cur.fetchall():
+            key = get_weekend_monthly_limit_key(row['tanggal'])
+            if key is not None:
+                user_weekend_types.add(key[2])
+
+    remaining_weekend_types = {5, 6} - user_weekend_types
+    if not remaining_weekend_types:
+        return False
+
+    weekend_availability = {weekday: False for weekday in remaining_weekend_types}
+    for day in range(1, calendar.monthrange(tahun, bulan)[1] + 1):
+        tanggal_obj = datetime(tahun, bulan, day).date()
+        weekday = tanggal_obj.weekday()
+        if weekday not in weekend_availability:
+            continue
+
+        tanggal = tanggal_obj.strftime('%Y-%m-%d')
+        limit = get_daily_limit(tanggal, 1)
+        current = get_assignment_count_for_date(tanggal)
+        if current < limit:
+            weekend_availability[weekday] = True
+
+    return not any(weekend_availability.values())
 
 def can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=None, limit=1):
     """Cek apakah user masih boleh mengambil tanggal weekend ini pada bulan terkait."""
