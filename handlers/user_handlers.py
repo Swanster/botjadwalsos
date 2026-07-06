@@ -583,7 +583,6 @@ def register_user_handlers(bot: telebot.TeleBot):
                         return
 
                     dt_obj_toggle = datetime.strptime(date_str, '%Y-%m-%d')
-                    user_group = get_user_group(user_id)
                     weekend_full = is_weekend_fallback_active_for_user(user_id, dt_obj_toggle.year, dt_obj_toggle.month)
 
                     if is_weekday_balance_locked(date_str, selections, weekend_full=weekend_full):

@@ -255,10 +255,17 @@ def kirim_peringatan_jadwal_mingguan(bot):
     
     print("Scheduler: Pengecekan peringatan jadwal mingguan selesai.")
     
+def _escape_markdown_text(value):
+    """Escape basic Markdown chars for Telegram parse_mode=Markdown."""
+    return str(value or '').replace('\\', '\\\\').replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
+
+
 def _format_user_mention(user):
     if user['telegram_username']:
-        return f"@{user['telegram_username']}"
-    return f"[{user['username']}](tg://user?id={user['user_id']})"
+        safe_username = str(user['telegram_username']).lstrip('@')
+        return f"@{safe_username}"
+    safe_name = _escape_markdown_text(user['username']) or 'pengguna'
+    return f"[{safe_name}](tg://user?id={user['user_id']})"
 
 
 def _get_open_schedule_period():

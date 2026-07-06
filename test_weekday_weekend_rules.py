@@ -75,10 +75,13 @@ def test_user_cannot_select_fourth_weekday_when_weekend_is_full():
 
 def test_fallback_active_when_remaining_weekend_type_is_full():
     """If user already has Saturday, fallback may activate when all Sundays are full."""
+    def fail_get_user_group(user_id):
+        raise AssertionError("fallback logic must use global daily capacity, not group quota")
+
     def fake_count(tanggal):
         return 1 if tanggal in {"2026-07-05", "2026-07-12", "2026-07-19", "2026-07-26"} else 0
 
-    with patch("core.database.get_user_group", return_value="INFRA"), \
+    with patch("core.database.get_user_group", side_effect=fail_get_user_group), \
          patch("core.database.get_daily_limit", return_value=1), \
          patch("core.database.get_assignment_count_for_date", side_effect=fake_count), \
          patch("core.database.connect_db") as mock_connect:
@@ -91,10 +94,13 @@ def test_fallback_active_when_remaining_weekend_type_is_full():
 
 def test_fallback_inactive_when_remaining_weekend_type_still_available():
     """If user already has Saturday but a Sunday is still open, keep normal 2 weekday limit."""
+    def fail_get_user_group(user_id):
+        raise AssertionError("fallback logic must use global daily capacity, not group quota")
+
     def fake_count(tanggal):
         return 1 if tanggal in {"2026-07-05", "2026-07-12", "2026-07-19"} else 0
 
-    with patch("core.database.get_user_group", return_value="INFRA"), \
+    with patch("core.database.get_user_group", side_effect=fail_get_user_group), \
          patch("core.database.get_daily_limit", return_value=1), \
          patch("core.database.get_assignment_count_for_date", side_effect=fake_count), \
          patch("core.database.connect_db") as mock_connect:
