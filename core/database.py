@@ -785,32 +785,51 @@ def init_default_admin():
 # =============================================================================
 
 def add_jadwal_manual(user_id, username, telegram_username, tanggal):
-    """Menambahkan jadwal secara manual oleh admin."""
+    """Menambahkan jadwal secara manual oleh admin.
+
+    Weekend (Sabtu/Minggu): admin web diizinkan mengisi user secara bebas,
+    melewati kuota divisi, batas 1x Sabtu/Minggu per bulan, dan validasi balance.
+    Weekday: mengikuti aturan kuota divisi seperti biasa.
+    """
     try:
-        allowed, _, _, _ = can_add_user_to_group_quota(user_id, tanggal)
-        if not allowed:
-            return False
+        is_weekend = datetime.strptime(tanggal, '%Y-%m-%d').date().weekday() in (5, 6)
+
+        if not is_weekend:
+            allowed, _, _, _ = can_add_user_to_group_quota(user_id, tanggal)
+            if not allowed:
+                return False
 
         with connect_db() as conn:
             cur = conn.cursor()
-            if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):
-                return False
-            target_date = datetime.strptime(tanggal, '%Y-%m-%d').date()
-            start_date = f"{target_date.year}-{target_date.month:02d}-01"
-            end_date = f"{target_date.year}-{target_date.month:02d}-{calendar.monthrange(target_date.year, target_date.month)[1]}"
+            if not is_weekend:
+                if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):
+                    return False
+                target_date = datetime.strptime(tanggal, '%Y-%m-%d').date()
+                start_date = f"{target_date.year}-{target_date.month:02d}-01"
+                end_date = f"{target_date.year}-{target_date.month:02d}-{calendar.monthrange(target_date.year, target_date.month)[1]}"
+                cur.execute(
+                    "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
+                    (user_id, start_date, end_date)
+                )
+                tanggal_list = [row['tanggal'] for row in cur.fetchall()]
+                if tanggal not in tanggal_list:
+                    tanggal_list.append(tanggal)
+                weekend_full = is_weekend_fallback_active_for_user(user_id, target_date.year, target_date.month)
+                balance_valid, _ = validate_weekday_weekend_balance(tanggal_list, weekend_full=weekend_full)
+                if not balance_valid:
+                    return False
+            # Weekend: insert tanpa validasi kuota/balance.
+            # Tolak duplikat user+tanggal yang sama (bukan OR REPLACE agar tidak
+            # menimpa data valid secara silent).
             cur.execute(
-                "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
-                (user_id, start_date, end_date)
+                "SELECT 1 FROM jadwal WHERE user_id = ? AND tanggal = ?",
+                (user_id, tanggal)
             )
-            tanggal_list = [row['tanggal'] for row in cur.fetchall()]
-            if tanggal not in tanggal_list:
-                tanggal_list.append(tanggal)
-            weekend_full = is_weekend_fallback_active_for_user(user_id, target_date.year, target_date.month)
-            balance_valid, _ = validate_weekday_weekend_balance(tanggal_list, weekend_full=weekend_full)
-            if not balance_valid:
+            if cur.fetchone():
+                print(f"add_jadwal_manual: user {user_id} sudah ada di {tanggal} (weekend duplikat ditolak).")
                 return False
             cur.execute(
-                "INSERT OR REPLACE INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)",
+                "INSERT INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)",
                 (user_id, username, telegram_username, tanggal)
             )
             conn.commit()

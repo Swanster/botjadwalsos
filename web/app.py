@@ -409,10 +409,21 @@ def create_app():
                 flash('User tidak ditemukan.', 'error')
                 return redirect(url_for('schedules'))
 
-            can_add_to_quota, quota_group, current_group_count, group_limit = can_add_user_to_group_quota(user_id, tanggal)
-            if not can_add_to_quota:
-                flash(f'❌ Kuota divisi {quota_group} pada {tanggal} sudah penuh ({current_group_count}/{group_limit}). Tidak bisa menambah jadwal.', 'error')
-                return redirect(url_for('schedules'))
+            # Tentukan apakah tanggal ini adalah weekend (Sabtu/Minggu).
+            # Di web app, admin diizinkan mengisi user SECARA BEBAS pada weekend
+            # (boleh >1x per user per bulan, boleh melampaui daily limit & kuota divisi).
+            # Weekday tetap mengikuti aturan kuota divisi seperti biasa.
+            try:
+                _tgl_obj = datetime.strptime(tanggal, '%Y-%m-%d').date()
+                _is_weekend = _tgl_obj.weekday() in (5, 6)
+            except ValueError:
+                _is_weekend = False
+
+            if not _is_weekend:
+                can_add_to_quota, quota_group, current_group_count, group_limit = can_add_user_to_group_quota(user_id, tanggal)
+                if not can_add_to_quota:
+                    flash(f'❌ Kuota divisi {quota_group} pada {tanggal} sudah penuh ({current_group_count}/{group_limit}). Tidak bisa menambah jadwal.', 'error')
+                    return redirect(url_for('schedules'))
             
             # Get username from members - convert sqlite3.Row to dict
             members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
@@ -428,26 +439,33 @@ def create_app():
                     telegram_username = m.get('telegram_username') or ''
                     break
             
-            # Check daily limit before adding
-            if is_date_full(tanggal, 1):
-                max_limit = get_daily_limit(tanggal, 1)
-                flash(f'❌ Tanggal {tanggal} sudah penuh ({max_limit} orang). Tidak bisa menambah jadwal.', 'error')
-                return redirect(url_for('schedules'))
-
-            if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):
-                hari = 'Sabtu' if datetime.strptime(tanggal, '%Y-%m-%d').weekday() == 5 else 'Minggu'
-                flash(f'❌ {username} sudah memiliki jadwal {hari} di bulan ini. Maksimal 1 {hari} per bulan.', 'error')
-                return redirect(url_for('schedules'))
-            
             target_date = datetime.strptime(tanggal, '%Y-%m-%d').date()
-            current_month_dates = [row['tanggal'] for row in get_user_jadwal_for_month(user_id, target_date.year, target_date.month)]
-            if tanggal not in current_month_dates:
-                current_month_dates.append(tanggal)
-            weekend_full = is_weekend_fallback_active_for_user(user_id, target_date.year, target_date.month)
-            balance_valid, balance_error = validate_weekday_weekend_balance(current_month_dates, weekend_full=weekend_full)
-            if not balance_valid:
-                flash(f'❌ {balance_error}', 'error')
-                return redirect(url_for('schedules'))
+
+            if _is_weekend:
+                # ADMIN OVERRIDE untuk weekend: lewati daily limit, batas 1x
+                # Sabtu/Minggu per bulan, dan validasi balance. Admin bebas isi
+                # user berapa pun di weekend lewat web app.
+                pass
+            else:
+                # Check daily limit before adding
+                if is_date_full(tanggal, 1):
+                    max_limit = get_daily_limit(tanggal, 1)
+                    flash(f'❌ Tanggal {tanggal} sudah penuh ({max_limit} orang). Tidak bisa menambah jadwal.', 'error')
+                    return redirect(url_for('schedules'))
+
+                if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):
+                    hari = 'Sabtu' if datetime.strptime(tanggal, '%Y-%m-%d').weekday() == 5 else 'Minggu'
+                    flash(f'❌ {username} sudah memiliki jadwal {hari} di bulan ini. Maksimal 1 {hari} per bulan.', 'error')
+                    return redirect(url_for('schedules'))
+
+                current_month_dates = [row['tanggal'] for row in get_user_jadwal_for_month(user_id, target_date.year, target_date.month)]
+                if tanggal not in current_month_dates:
+                    current_month_dates.append(tanggal)
+                weekend_full = is_weekend_fallback_active_for_user(user_id, target_date.year, target_date.month)
+                balance_valid, balance_error = validate_weekday_weekend_balance(current_month_dates, weekend_full=weekend_full)
+                if not balance_valid:
+                    flash(f'❌ {balance_error}', 'error')
+                    return redirect(url_for('schedules'))
 
             if add_jadwal_manual(user_id, username, telegram_username, tanggal):
                 add_audit_log(current_user.username, 'ADD_SCHEDULE', f'Menambah jadwal manual untuk {username} ({user_id}) pada tanggal {tanggal}')
