@@ -282,19 +282,23 @@ def register_user_handlers(bot: telebot.TeleBot):
         bot.send_message(chat_id, pesan, parse_mode='Markdown', message_thread_id=thread_id)
 
     def send_lihat_jadwal(chat_id, thread_id=None):
-        bulan_dibuka = get_bulan_dibuka()
         today = date.today()
-        if bulan_dibuka and (bulan_dibuka['tahun'] != today.year or bulan_dibuka['bulan'] != today.month):
-            markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton(f"🗓️ Lihat Jadwal Bulan Ini ({NAMA_BULAN[today.month]})", callback_data=f"view_rekap_{today.year}_{today.month}"))
-            markup.add(InlineKeyboardButton(f"✏️ Lihat Jadwal Dibuka ({NAMA_BULAN[bulan_dibuka['bulan']]})", callback_data=f"view_rekap_{bulan_dibuka['tahun']}_{bulan_dibuka['bulan']}"))
-            bot.send_message(chat_id, "Silakan pilih rekap jadwal yang ingin Anda lihat:", reply_markup=markup, message_thread_id=thread_id)
-        else:
-            target_tahun, target_bulan = (bulan_dibuka['tahun'], bulan_dibuka['bulan']) if bulan_dibuka else (today.year, today.month)
-            rekap_text = generate_rekap_text(target_tahun, target_bulan)
-            markup = InlineKeyboardMarkup()
-            markup.row(InlineKeyboardButton("🗓️ Hari Ini", callback_data="view_today"), InlineKeyboardButton("📅 Minggu Ini", callback_data="view_week"))
-            bot.send_message(chat_id, rekap_text, parse_mode='Markdown', message_thread_id=thread_id, reply_markup=markup)
+        markup = InlineKeyboardMarkup()
+
+        # Always show current month
+        markup.add(InlineKeyboardButton(
+            f"🗓️ {NAMA_BULAN[today.month]} {today.year}",
+            callback_data=f"view_rekap_{today.year}_{today.month}"))
+
+        # Show next month if already opened
+        bulan_terbuka_list = get_bulan_dibuka_list()
+        for b in bulan_terbuka_list:
+            if b['tahun'] != today.year or b['bulan'] != today.month:
+                markup.add(InlineKeyboardButton(
+                    f"✏️ {NAMA_BULAN[b['bulan']]} {b['tahun']} (Dibuka)",
+                    callback_data=f"view_rekap_{b['tahun']}_{b['bulan']}"))
+
+        bot.send_message(chat_id, "Pilih bulan untuk melihat jadwal:", reply_markup=markup, message_thread_id=thread_id)
 
     def start_cuti_flow(chat_id, user, thread_id=None):
         today = date.today(); user_id = user.id
