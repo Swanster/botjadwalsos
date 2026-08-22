@@ -136,23 +136,34 @@ All Bot schedule mutations that can change ownership or counts use the following
 
 `BEGIN IMMEDIATE` serializes writers, but the implementation must not claim that a second session automatically reads the first commit. If the lock cannot be acquired within the configured SQLite timeout/retry policy, the operation fails clearly and the user retries.
 
+### Transaction connection boundary
+
+- Each retry attempt creates one fresh SQLite connection, configures its busy timeout, and begins `BEGIN IMMEDIATE` on that connection.
+- After `BEGIN IMMEDIATE`, every read that can affect the mutation decision and every write must use that same `conn`/cursor until commit or rollback.
+- Mutation code must not call public helpers that implicitly open another connection, including `get_setting()`, `get_user_group()`, `get_user_jadwal_for_month()`, `get_tukar_request_by_id()`, `get_assignment_count_for_date()`, or `is_weekend_fallback_active_for_user()`.
+- Add transaction-aware private helper variants or connection parameters for these paths. At minimum, the transaction-aware forms must cover settings reads, member/group reads, jadwal reads and conflict counts, pending swap request reads, daily-limit reads, and weekend-fallback reads. Nested reads inside a weekend-fallback helper must use the same transaction connection as well.
+- Public helpers may remain as wrappers for non-transaction callers, but the three Bot mutations must call the transaction-aware forms directly. Pure validators that only inspect supplied lists may remain connection-free.
+- External side effects such as Google Sheets synchronization and Telegram notifications happen only after the database transaction commits; they are not part of the atomic database decision.
+- Tests must verify that save, swap, and cancellation do not open a nested SQLite connection during an active mutation attempt and that a transaction-aware helper reads through the mutation connection.
+
+
 ### `update_user_jadwal_for_month`
 
 This is the authoritative Bot `/start` save path.
 
 For each attempt:
 
-1. Open a database connection and execute `BEGIN IMMEDIATE`.
-2. Read the member's canonical group from `user_groups` inside the transaction.
-3. Read the relevant monthly limit from Settings inside the transaction.
+1. Open one database connection for the attempt, configure its busy timeout, and execute `BEGIN IMMEDIATE` on that connection.
+2. Read the member's canonical group from `user_groups` through a transaction-aware helper using the same `conn`.
+3. Read the relevant monthly limit from Settings through a transaction-aware helper using the same `conn`.
 4. Validate the final selection list:
    - Delivery: exactly one date in the target month;
    - Operation/APPS/MONITORING: count does not exceed that division's `max_hari`;
    - existing weekend monthly limits;
-   - existing weekday/weekend balance rules;
+   - existing weekday/weekend balance rules, including any database-backed weekend-fallback lookup through the same `conn`;
    - every selected date is in the target month and has valid date format;
    - every selected date has no existing `jadwal` row owned by another user, regardless of whether that row came from the Bot or the web.
-5. The conflict query excludes rows belonging to the current `user_id`, so a user can keep their own existing dates while editing; all other `jadwal` rows are conflicts.
+5. The conflict query excludes rows belonging to the current `user_id`, so a user can keep their own existing dates while editing; all other `jadwal` rows are conflicts and the query uses the same `conn`.
 6. Only after every validation passes, delete the current user's rows for the target month.
 7. Insert the final selection list.
 8. Commit.
@@ -165,11 +176,11 @@ If any validation fails, rollback before the old rows are deleted. This protects
 
 Inside a `BEGIN IMMEDIATE` retry attempt:
 
-1. Re-read the pending request.
+1. Re-read the pending request through a transaction-aware helper using the same `conn`.
 2. Verify both source rows still exist and are owned by the expected users.
 3. For each source date, query all `jadwal` rows for that date and exclude only its expected source row. Reject the swap if any row remains, including a row created through the web weekend override; no provenance distinction is available or allowed.
-4. Build the post-swap monthly date lists for both users across every affected month.
-5. Revalidate Delivery exact-one, Operation/APPS/MONITORING `max_hari`, weekend monthly limits, weekday/weekend balance, and same-day-type rules against those post-swap lists.
+4. Build the post-swap monthly date lists for both users across every affected month through the same `conn`.
+5. Revalidate Delivery exact-one, Operation/APPS/MONITORING `max_hari`, weekend monthly limits, weekday/weekend balance, and same-day-type rules; all settings and database-backed fallback reads use the same `conn`.
 6. Perform both row ownership updates.
 7. Mark the request `APPROVED` only after both updates succeed.
 8. Commit atomically.
@@ -183,7 +194,7 @@ This is the Bot `/batal_jadwal` mutation.
 Inside a `BEGIN IMMEDIATE` retry attempt:
 
 1. Normalize and validate the requested dates.
-2. Verify every requested row is still owned by the requesting user in the target month(s).
+2. Verify every requested row is still owned by the requesting user in the target month(s) through the same `conn`; do not use a separate-connection jadwal helper.
 3. If any requested row is stale or missing, rollback and reject the entire operation; do not partially delete other requested dates.
 4. Delete only the verified rows owned by that user.
 5. Commit atomically.
@@ -251,6 +262,7 @@ Tests must cover observable behavior rather than implementation-only details.
 - A selected date already owned by another `jadwal` row is rejected, including a row created through the web weekend override.
 - Validation failure leaves the previous monthly schedule unchanged.
 - Concurrent/save-lock scenarios exercise `BEGIN IMMEDIATE`, bounded retry, rollback, and the clear lock failure result.
+- The save test detects any nested connection opened after `BEGIN IMMEDIATE` and verifies settings, group, fallback, and conflict reads use the transaction connection.
 
 ### Swap mutation
 
@@ -260,6 +272,7 @@ Tests must cover observable behavior rather than implementation-only details.
 - Swap rejects a post-state Operation/APPS/MONITORING max limit violation.
 - Valid swap updates both rows and marks the request approved atomically when both dates contain only their expected source rows.
 - Lock exhaustion leaves both schedules and request status unchanged.
+- Swap tests detect nested connection attempts while re-reading the request and validating post-swap state.
 
 ### Cancellation mutation
 
@@ -268,6 +281,7 @@ Tests must cover observable behavior rather than implementation-only details.
 - Multiple valid dates delete atomically.
 - Deleting the last Delivery schedule is allowed by the explicit cancellation exception.
 - Lock exhaustion leaves all requested rows intact.
+- Cancellation tests detect nested connection attempts during stale-row verification and deletion.
 
 ### Regression
 
