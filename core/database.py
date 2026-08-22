@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import re
 from datetime import datetime
 import calendar
 import pytz
@@ -9,20 +10,53 @@ makassar_tz = pytz.timezone("Asia/Makassar")
 
 from config import DB_NAME
 
-GROUP_NAMES = ('INFRA', 'APPS', 'MONITORING')
+GROUP_NAMES = (
+    'INFRA_DELIVERY',
+    'INFRA_OPERATION',
+    'APPS',
+    'MONITORING',
+)
+GROUP_LABELS = {
+    'INFRA_DELIVERY': 'Infra Delivery',
+    'INFRA_OPERATION': 'Infra Operation',
+    'APPS': 'APPS',
+    'MONITORING': 'MONITORING',
+}
 LEGACY_GROUP_ALIASES = {
-    'CE': 'INFRA',
+    'CE': 'INFRA_OPERATION',
+    'INFRA': 'INFRA_OPERATION',
 }
 GROUP_QUOTA_SETTING_KEYS = {
-    'INFRA': 'kuota_infra',
+    'INFRA_DELIVERY': 'kuota_infra',
+    'INFRA_OPERATION': 'kuota_infra',
     'APPS': 'kuota_apps',
     'MONITORING': 'kuota_monitoring',
 }
 GROUP_DEFAULT_QUOTAS = {
-    'INFRA': 1,
+    'INFRA_DELIVERY': 1,
+    'INFRA_OPERATION': 1,
     'APPS': 1,
     'MONITORING': 1,
 }
+MONTHLY_LIMIT_SETTING_KEYS = {
+    'INFRA_OPERATION': 'max_hari_infra_operation',
+    'APPS': 'max_hari_apps',
+    'MONITORING': 'max_hari_monitoring',
+}
+MONTHLY_DEFAULT_LIMITS = {
+    'INFRA_DELIVERY': 1,
+    'INFRA_OPERATION': 5,
+    'APPS': 31,
+    'MONITORING': 31,
+}
+DEFAULT_SETTINGS = (
+    ('kuota_infra', '1', 'Jumlah orang Infra per hari untuk setiap divisi Infra'),
+    ('max_hari_infra_operation', '5', 'Maksimal hari standby per bulan untuk Infra Operation'),
+    ('kuota_apps', '1', 'Jumlah orang APPS per hari'),
+    ('max_hari_apps', '31', 'Maksimal hari standby per bulan untuk APPS'),
+    ('kuota_monitoring', '1', 'Jumlah orang Monitoring per hari'),
+    ('max_hari_monitoring', '31', 'Maksimal hari standby per bulan untuk Monitoring'),
+)
 ADMIN_ROLES = ('super_admin', 'admin', 'user')
 
 def normalize_admin_role(role):
@@ -63,7 +97,6 @@ def create_tables():
     """Membuat semua tabel yang diperlukan, termasuk 'user_groups'."""
     with connect_db() as conn:
         cur = conn.cursor()
-        # ... (tabel status_bulanan, jadwal, absensi, konfigurasi, tukar_requests tetap sama) ...
         cur.execute('''
         CREATE TABLE IF NOT EXISTS status_bulanan (
             id INTEGER PRIMARY KEY, tahun INTEGER NOT NULL, bulan INTEGER NOT NULL,
@@ -80,70 +113,42 @@ def create_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
             tanggal_absen TEXT NOT NULL, UNIQUE(user_id, tanggal_absen)
         )''')
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS konfigurasi (
+        cur.execute('''CREATE TABLE IF NOT EXISTS konfigurasi (
             kunci TEXT PRIMARY KEY, nilai TEXT NOT NULL
         )''')
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS tukar_requests (
+        cur.execute('''CREATE TABLE IF NOT EXISTS tukar_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_a_id INTEGER NOT NULL, user_a_username TEXT NOT NULL,
             user_b_id INTEGER NOT NULL, tanggal_a TEXT NOT NULL, tanggal_b TEXT NOT NULL,
             status TEXT NOT NULL CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED')),
             waktu_request TEXT NOT NULL
         )''')
-        
-        # --- TABEL BARU ---
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS user_groups (
+        cur.execute('''CREATE TABLE IF NOT EXISTS user_groups (
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             telegram_username TEXT,
-            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'APPS', 'MONITORING'))
+            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA_DELIVERY', 'INFRA_OPERATION', 'APPS', 'MONITORING'))
         )''')
         _ensure_user_groups_schema(cur)
-        
-        # --- TABEL SETTINGS (untuk kuota dinamis) ---
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            description TEXT
+        cur.execute('''CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY, value TEXT NOT NULL, description TEXT
         )''')
-        
-        # --- TABEL ADMIN USERS (untuk login web dashboard) ---
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS admin_users (
+        _init_default_settings(cur)
+        cur.execute('''CREATE TABLE IF NOT EXISTS admin_users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
+            username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'admin' CHECK(role IN ('super_admin', 'admin', 'user')),
             created_at TEXT NOT NULL
         )''')
         _ensure_admin_users_role_column(cur)
-        
-        # --- TABEL DAILY LIMITS (untuk batasan per hari) ---
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS daily_limits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tanggal TEXT NOT NULL UNIQUE,
-            max_assignments INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+        cur.execute('''CREATE TABLE IF NOT EXISTS daily_limits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, tanggal TEXT NOT NULL UNIQUE,
+            max_assignments INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         )''')
-        
-        # --- TABEL AUDIT LOGS (untuk mencatat aktivitas admin) ---
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS audit_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL,
-            action TEXT NOT NULL,
-            description TEXT,
-            timestamp TEXT NOT NULL
+        cur.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, action TEXT NOT NULL,
+            description TEXT, timestamp TEXT NOT NULL
         )''')
-
-        _migrate_ce_to_infra(cur)
-        
         conn.commit()
     print("Semua tabel (termasuk user_groups, settings, admin_users) berhasil diperiksa/dibuat.")
 
@@ -155,44 +160,35 @@ def _ensure_admin_users_role_column(cur):
         cur.execute("ALTER TABLE admin_users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
 
 def _ensure_user_groups_schema(cur):
-    """Pastikan constraint user_groups tidak lagi menerima team legacy CE."""
+    """Rebuild user_groups unless its ordered group constraint is canonical."""
     cur.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_groups'")
     table = cur.fetchone()
-    if not table or "'CE'" not in (table['sql'] or ''):
+    table_sql = (table['sql'] if table else '') or ''
+    match = re.search(r'group_name\s+IN\s*\((.*?)\)', table_sql, re.IGNORECASE | re.DOTALL)
+    values = tuple(re.findall(r"['\"]([^'\"]*)['\"]", match.group(1))) if match else ()
+    if values == GROUP_NAMES:
         return
-
     cur.execute("DROP TABLE IF EXISTS user_groups_new")
-    cur.execute('''
-    CREATE TABLE user_groups_new (
-        user_id INTEGER PRIMARY KEY,
-        username TEXT,
-        telegram_username TEXT,
-        group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'APPS', 'MONITORING'))
+    cur.execute('''CREATE TABLE user_groups_new (
+        user_id INTEGER PRIMARY KEY, username TEXT, telegram_username TEXT,
+        group_name TEXT NOT NULL CHECK(group_name IN ('INFRA_DELIVERY', 'INFRA_OPERATION', 'APPS', 'MONITORING'))
     )''')
-    cur.execute("""
-        INSERT INTO user_groups_new (user_id, username, telegram_username, group_name)
-        SELECT user_id, username, telegram_username,
-               CASE WHEN group_name = 'CE' THEN 'INFRA' ELSE group_name END
-        FROM user_groups
-    """)
+    cur.execute("SELECT user_id, username, telegram_username, group_name FROM user_groups")
+    normalized_rows = []
+    for row in cur.fetchall():
+        canonical = normalize_group_name(row['group_name'])
+        if canonical not in GROUP_NAMES:
+            raise ValueError(f"Grup legacy tidak valid: {row['group_name']}")
+        normalized_rows.append((row['user_id'], row['username'], row['telegram_username'], canonical))
+    cur.executemany("INSERT INTO user_groups_new (user_id, username, telegram_username, group_name) VALUES (?, ?, ?, ?)", normalized_rows)
     cur.execute("DROP TABLE user_groups")
     cur.execute("ALTER TABLE user_groups_new RENAME TO user_groups")
 
-def _migrate_ce_to_infra(cur):
-    """Migrasi legacy: team CE sudah merger ke INFRA."""
-    cur.execute("UPDATE user_groups SET group_name = 'INFRA' WHERE group_name = 'CE'")
-
-    cur.execute("SELECT value FROM settings WHERE key = 'ce_merged_to_infra'")
-    if cur.fetchone():
-        cur.execute("DELETE FROM settings WHERE key IN ('kuota_ce', 'max_hari_ce')")
-        return
-
-    cur.execute(
-        "INSERT OR REPLACE INTO settings (key, value, description) VALUES (?, ?, ?)",
-        ('ce_merged_to_infra', '1', 'Legacy CE sudah dimigrasikan ke INFRA')
-    )
-    cur.execute("DELETE FROM settings WHERE key IN ('kuota_ce', 'max_hari_ce')")
-
+def _init_default_settings(cur):
+    """Insert missing canonical settings and remove obsolete legacy keys."""
+    for key, value, description in DEFAULT_SETTINGS:
+        cur.execute("INSERT OR IGNORE INTO settings (key, value, description) VALUES (?, ?, ?)", (key, value, description))
+    cur.execute("DELETE FROM settings WHERE key IN ('max_hari_infra', 'kuota_ce', 'max_hari_ce')")
 def set_user_group(user_id, username, telegram_username, group_name):
     """Menetapkan atau memperbarui grup untuk seorang pengguna."""
     group_name = normalize_group_name(group_name)
@@ -583,40 +579,38 @@ def get_all_settings():
         return {row['key']: {'value': row['value'], 'description': row['description']} for row in cur.fetchall()}
 
 def init_default_settings():
-    """Inisialisasi settings default jika belum ada."""
-    defaults = [
-        ('kuota_infra', '1', 'Jumlah orang INFRA per hari'),
-        ('max_hari_infra', '10', 'Maksimal hari standby per bulan untuk INFRA'),
-        ('kuota_apps', '1', 'Jumlah orang APPS per hari'),
-        ('max_hari_apps', '31', 'Maksimal hari standby per bulan untuk APPS'),
-        ('kuota_monitoring', '1', 'Jumlah orang Monitoring per hari'),
-        ('max_hari_monitoring', '31', 'Maksimal hari standby per bulan untuk Monitoring'),
-    ]
+    """Idempotent public wrapper for canonical settings initialization."""
     with connect_db() as conn:
-        cur = conn.cursor()
-        for key, value, desc in defaults:
-            cur.execute("SELECT 1 FROM settings WHERE key = ?", (key,))
-            if not cur.fetchone():
-                cur.execute("INSERT INTO settings (key, value, description) VALUES (?, ?, ?)", (key, value, desc))
+        _init_default_settings(conn.cursor())
         conn.commit()
     print("🔧 Default settings berhasil diinisialisasi.")
 
 def get_group_quota(group_name):
     """Mengambil kuota harian untuk divisi tertentu."""
-    group_name = (group_name or '').upper()
-    setting_key = GROUP_QUOTA_SETTING_KEYS.get(group_name)
-    default_quota = GROUP_DEFAULT_QUOTAS.get(group_name, 1)
+    canonical = normalize_group_name(group_name)
+    setting_key = GROUP_QUOTA_SETTING_KEYS.get(canonical)
+    default_quota = GROUP_DEFAULT_QUOTAS.get(canonical, 1)
     if not setting_key:
         return default_quota
-
     try:
         return max(0, int(get_setting(setting_key, default_quota)))
     except (TypeError, ValueError):
         return default_quota
 
+def get_monthly_limit_for_group(group_name):
+    canonical = normalize_group_name(group_name)
+    if canonical == 'INFRA_DELIVERY':
+        return 1
+    key = MONTHLY_LIMIT_SETTING_KEYS.get(canonical)
+    default = MONTHLY_DEFAULT_LIMITS.get(canonical, 31)
+    try:
+        return max(0, int(get_setting(key, default))) if key else default
+    except (TypeError, ValueError):
+        return default
+
 def get_group_assignment_count_for_date(tanggal, group_name, exclude_user_id=None):
     """Menghitung jumlah jadwal divisi pada tanggal tertentu."""
-    group_name = (group_name or '').upper()
+    group_name = normalize_group_name(group_name)
     with connect_db() as conn:
         cur = conn.cursor()
         params = [tanggal, group_name]
@@ -624,7 +618,6 @@ def get_group_assignment_count_for_date(tanggal, group_name, exclude_user_id=Non
         if exclude_user_id is not None:
             exclude_clause = 'AND j.user_id != ?'
             params.append(exclude_user_id)
-
         cur.execute(f"""
             SELECT COUNT(*) as count
             FROM jadwal j
@@ -639,9 +632,10 @@ def get_group_quota_status_for_date(tanggal):
     """Mengambil status kuota semua divisi untuk satu tanggal."""
     status = {}
     for group_name in GROUP_NAMES:
-        limit = get_group_quota(group_name)
-        current = get_group_assignment_count_for_date(tanggal, group_name)
-        status[group_name] = {
+        canonical = normalize_group_name(group_name)
+        limit = get_group_quota(canonical)
+        current = get_group_assignment_count_for_date(tanggal, canonical)
+        status[canonical] = {
             'limit': limit,
             'current': current,
             'remaining': max(0, limit - current),
