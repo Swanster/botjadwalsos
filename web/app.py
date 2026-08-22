@@ -13,6 +13,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.database import (
+    GROUP_NAMES, GROUP_LABELS,
     verify_admin, get_admin_by_username, update_admin_password, get_all_admin_users,
     add_admin_user, delete_admin_user, update_admin_role,
     get_all_users_in_group, set_user_group, get_user_group, delete_user_from_group,
@@ -52,6 +53,13 @@ def create_app():
         'user': 'User',
     }
     WRITE_ROLES = ('super_admin', 'admin')
+    def load_member_groups():
+        groups = {
+            group_name: [dict(member) for member in get_all_users_in_group(group_name)]
+            for group_name in GROUP_NAMES
+        }
+        all_members = [member for group in groups.values() for member in group]
+        return groups, all_members
 
     class User(UserMixin):
         def __init__(self, username, role='user'):
@@ -125,11 +133,7 @@ def create_app():
         # Get schedules for the month
         jadwal_list = get_jadwal_for_month(year, month)
 
-        # Build member lookup for group info
-        members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
-        members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
-        members_monitoring = [dict(m) for m in get_all_users_in_group('MONITORING')]
-        all_members = members_infra + members_apps + members_monitoring
+        members_by_group, all_members = load_member_groups()
 
         # Create user_id to group_name mapping
         user_group_map = {}
@@ -210,10 +214,7 @@ def create_app():
         # Get current month schedule
         jadwal_bulan_ini = get_jadwal_for_month(today.year, today.month)
         
-        # Get all members
-        members_infra = get_all_users_in_group('INFRA')
-        members_apps = get_all_users_in_group('APPS')
-        members_monitoring = get_all_users_in_group('MONITORING')
+        members_by_group, all_members = load_member_groups()
         
         # Get open month info
         bulan_dibuka = get_bulan_dibuka()
@@ -223,9 +224,8 @@ def create_app():
             today_str=format_tanggal_indonesia(today),
             jadwal_hari_ini=jadwal_hari_ini,
             jadwal_bulan_ini=jadwal_bulan_ini,
-            members_infra=members_infra,
-            members_apps=members_apps,
-            members_monitoring=members_monitoring,
+            members_by_group=members_by_group,
+            all_members=all_members,
             bulan_dibuka=bulan_dibuka
         )
 
@@ -262,13 +262,10 @@ def create_app():
     @app.route('/members')
     @login_required
     def members():
-        members_infra = get_all_users_in_group('INFRA')
-        members_apps = get_all_users_in_group('APPS')
-        members_monitoring = get_all_users_in_group('MONITORING')
-        return render_template('members.html', 
-            members_infra=members_infra, 
-            members_apps=members_apps,
-            members_monitoring=members_monitoring
+        members_by_group, all_members = load_member_groups()
+        return render_template('members.html',
+            members_by_group=members_by_group,
+            all_members=all_members
         )
     
     @app.route('/members/add', methods=['POST'])
@@ -277,7 +274,7 @@ def create_app():
         user_id = request.form.get('user_id', '').strip()
         username = request.form.get('username', '').strip()
         telegram_username = request.form.get('telegram_username', '').strip()
-        group_name = request.form.get('group_name', 'INFRA')
+        group_name = request.form.get('group_name', 'INFRA_OPERATION')
         
         if not user_id or not username:
             flash('User ID dan Username wajib diisi.', 'error')
@@ -286,7 +283,9 @@ def create_app():
         try:
             user_id = int(user_id)
             set_user_group(user_id, username, telegram_username, group_name)
-            flash(f'Member {username} berhasil ditambahkan ke grup {group_name}.', 'success')
+            canonical_group = get_user_group(user_id)
+            group_label = GROUP_LABELS.get(canonical_group, canonical_group)
+            flash(f'Member {username} berhasil ditambahkan ke grup {group_label}.', 'success')
         except ValueError:
             flash('User ID harus berupa angka.', 'error')
         
@@ -297,10 +296,12 @@ def create_app():
     def update_member(user_id):
         username = request.form.get('username', '').strip()
         telegram_username = request.form.get('telegram_username', '').strip()
-        group_name = request.form.get('group_name', 'INFRA')
+        group_name = request.form.get('group_name', 'INFRA_OPERATION')
         
         set_user_group(user_id, username, telegram_username, group_name)
-        flash(f'Member {username} berhasil diperbarui.', 'success')
+        canonical_group = get_user_group(user_id)
+        group_label = GROUP_LABELS.get(canonical_group, canonical_group)
+        flash(f'Member {username} berhasil diperbarui ke grup {group_label}.', 'success')
         return redirect(url_for('members'))
     
     @app.route('/members/<int:user_id>/delete', methods=['POST'])
@@ -326,11 +327,7 @@ def create_app():
         # Get schedules for the month
         jadwal_list = get_jadwal_for_month(year, month)
 
-        # Build member lookup for group info
-        members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
-        members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
-        members_monitoring = [dict(m) for m in get_all_users_in_group('MONITORING')]
-        all_members = members_infra + members_apps + members_monitoring
+        members_by_group, all_members = load_member_groups()
 
         assignment_counts = {}
         for jadwal in jadwal_list:
@@ -386,9 +383,11 @@ def create_app():
             month_name=NAMA_BULAN[month],
             month_calendar=month_calendar,
             jadwal_per_tanggal=jadwal_per_tanggal,
+            members_by_group=members_by_group,
             all_members=all_members,
             daily_limits=daily_limits_info,
-            group_quotas=group_quota_info
+            group_quotas=group_quota_info,
+            group_labels=GROUP_LABELS
         )
     
     @app.route('/schedules/add', methods=['POST'])
@@ -426,10 +425,7 @@ def create_app():
                     return redirect(url_for('schedules'))
             
             # Get username from members - convert sqlite3.Row to dict
-            members_infra = [dict(m) for m in get_all_users_in_group('INFRA')]
-            members_apps = [dict(m) for m in get_all_users_in_group('APPS')]
-            members_monitoring = [dict(m) for m in get_all_users_in_group('MONITORING')]
-            members = members_infra + members_apps + members_monitoring
+            _, members = load_member_groups()
             
             username = ''
             telegram_username = ''
@@ -636,15 +632,19 @@ def create_app():
         if request.method == 'POST':
             # Update all settings from form
             keys = [
-                'kuota_infra', 'kuota_apps', 'kuota_monitoring',
-                'max_hari_infra', 'max_hari_apps', 'max_hari_monitoring'
+                'kuota_infra',
+                'kuota_apps',
+                'kuota_monitoring',
+                'max_hari_infra_operation',
+                'max_hari_apps',
+                'max_hari_monitoring',
             ]
-            
+
             for key in keys:
                 value = request.form.get(key)
                 if value is not None:
                     set_setting(key, value)
-            
+
             add_audit_log(current_user.username, 'UPDATE_SETTINGS', 'Memperbarui batasan kuota per grup')
             flash('Pengaturan kuota berhasil diperbarui.', 'success')
             return redirect(url_for('settings'))

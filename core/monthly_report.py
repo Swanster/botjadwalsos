@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from core.database import (
     GROUP_NAMES,
+    GROUP_LABELS,
     format_tanggal_indonesia,
     get_all_users_in_group,
     get_group_quota_status_for_date,
@@ -41,6 +42,7 @@ def build_monthly_report(tahun, bulan):
             'user_id': member['user_id'],
             'name': member['display_name'],
             'group_name': member.get('group_name', '-'),
+            'group_label': GROUP_LABELS.get(member.get('group_name'), member.get('group_name', '-')),
             'count': 0,
             'saturday_count': 0,
             'sunday_count': 0,
@@ -51,6 +53,7 @@ def build_monthly_report(tahun, bulan):
     per_group = {
         group_name: {
             'group_name': group_name,
+            'group_label': GROUP_LABELS.get(group_name, group_name),
             'member_count': len([member for member in members if member.get('group_name') == group_name]),
             'total': 0,
             'average': 0,
@@ -70,11 +73,11 @@ def build_monthly_report(tahun, bulan):
                 'user_id': user_id,
                 'name': name,
                 'group_name': group_name,
+                'group_label': GROUP_LABELS.get(group_name, group_name),
                 'count': 0,
                 'saturday_count': 0,
                 'sunday_count': 0,
             }
-
         per_user[user_id]['count'] += 1
         if group_name in per_group:
             per_group[group_name]['total'] += 1
@@ -109,6 +112,7 @@ def build_monthly_report(tahun, bulan):
                 under_quota.append({
                     'tanggal': tanggal,
                     'group_name': group_name,
+                    'group_label': GROUP_LABELS.get(group_name, group_name),
                     'current': info['current'],
                     'limit': info['limit'],
                 })
@@ -116,6 +120,7 @@ def build_monthly_report(tahun, bulan):
                 over_quota.append({
                     'tanggal': tanggal,
                     'group_name': group_name,
+                    'group_label': GROUP_LABELS.get(group_name, group_name),
                     'current': info['current'],
                     'limit': info['limit'],
                 })
@@ -167,22 +172,23 @@ def format_monthly_report_for_telegram(report):
     ]
 
     for group in report['per_group']:
+        label = group.get('group_label') or group['group_name']
         lines.append(
-            f"- {group['group_name']}: *{group['total']}* jadwal "
+            f"- {label}: *{group['total']}* jadwal "
             f"({group['member_count']} member, rata-rata {group['average']})"
         )
-
     lines.extend(["", "👤 *Per Orang*"])
     for user in report['per_user'][:20]:
-        lines.append(f"- {user['name']} ({user['group_name']}): *{user['count']}*")
-
+        label = user.get('group_label') or user['group_name']
+        lines.append(f"- {user['name']} ({label}): *{user['count']}*")
     if len(report['per_user']) > 20:
         lines.append(f"- ...dan {len(report['per_user']) - 20} member lainnya.")
 
     lines.extend(["", "⚠️ *Belum Ada Jadwal*"])
     if report['zero_users']:
         for user in report['zero_users'][:15]:
-            lines.append(f"- {user['name']} ({user['group_name']})")
+            label = user.get('group_label') or user['group_name']
+            lines.append(f"- {user['name']} ({label})")
         if len(report['zero_users']) > 15:
             lines.append(f"- ...dan {len(report['zero_users']) - 15} member lainnya.")
     else:
@@ -193,8 +199,9 @@ def format_monthly_report_for_telegram(report):
         for item in report['under_quota'][:20]:
             tanggal_obj = datetime.strptime(item['tanggal'], '%Y-%m-%d').date()
             hari = HARI_MAP_ID[tanggal_obj.weekday()]
+            label = item.get('group_label') or item['group_name']
             lines.append(
-                f"- {hari}, {tanggal_obj.day}: {item['group_name']} "
+                f"- {hari}, {tanggal_obj.day}: {label} "
                 f"{item['current']}/{item['limit']}"
             )
         if len(report['under_quota']) > 20:
@@ -206,8 +213,9 @@ def format_monthly_report_for_telegram(report):
         lines.extend(["", "🚨 *Perlu Dicek*"])
         for item in report['over_quota'][:10]:
             tanggal_obj = datetime.strptime(item['tanggal'], '%Y-%m-%d').date()
+            label = item.get('group_label') or item['group_name']
             lines.append(
-                f"- {tanggal_obj.day} {report['nama_bulan']}: {item['group_name']} "
+                f"- {tanggal_obj.day} {report['nama_bulan']}: {label} "
                 f"{item['current']}/{item['limit']} melebihi kuota"
             )
         for user in report['weekend_warnings'][:10]:

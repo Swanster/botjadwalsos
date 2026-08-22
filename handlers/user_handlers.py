@@ -10,6 +10,7 @@ import pytz
 import time
 
 from config import ALLOWED_TOPIC_ID
+import core.database as db
 from core.database import (
     GROUP_NAMES,
     get_bulan_dibuka, get_bulan_dibuka_list, get_konfigurasi, get_jadwal_for_month,
@@ -21,6 +22,15 @@ from core.database import (
     validate_weekday_weekend_balance, validate_weekend_monthly_limits,
     is_weekend_fallback_active_for_user
 )
+SAVE_ERROR_MESSAGES = {
+    'delivery_exact_one': 'Infra Delivery harus memiliki tepat 1 jadwal pada bulan ini.',
+    'monthly_limit': 'Jumlah jadwal melebihi batas bulanan divisi Anda.',
+    'date_conflict': 'Salah satu tanggal sudah diambil anggota lain.',
+    'weekend_limit': 'Batas jadwal Sabtu/Minggu per bulan terlampaui.',
+    'weekday_balance': 'Batas keseimbangan weekday/weekend terlampaui.',
+    'database_locked': db.LOCK_RETRY_MESSAGE,
+}
+
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets
 from core.schedule_recap import generate_rekap_text as build_rekap_text
 
@@ -250,7 +260,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         user_id = user.id
         user_group = get_user_group(user_id)
         if not user_group:
-            bot.send_message(chat_id, "❌ Akun Anda belum terdaftar di grup manapun (INFRA/APPS/MONITORING). Silakan hubungi Admin untuk didaftarkan.", message_thread_id=thread_id)
+            bot.send_message(chat_id, "❌ Akun Anda belum terdaftar di grup manapun (INFRA_DELIVERY/INFRA_OPERATION/APPS/MONITORING). Silakan hubungi Admin untuk didaftarkan.", message_thread_id=thread_id)
             return
 
         jadwal_bulan_ini = get_jadwal_for_month(tahun, bulan)
@@ -394,10 +404,11 @@ def register_user_handlers(bot: telebot.TeleBot):
             "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
             "*/guide* atau */panduan* - Menampilkan panduan ini.\n\n"
             "📌 *Catatan aturan jadwal:*\n"
-            "- Setiap orang maksimal 2 jadwal weekday setiap bulan.\n"
-            "- Jika semua slot weekend team sudah penuh, boleh fallback maksimal 3 weekday.\n"
+            "- Infra Delivery wajib memilih tepat 1 jadwal per bulan saat menyimpan melalui /start.\n"
+            "- Infra Operation mengikuti maksimal hari/bulan yang diatur Admin (default 5).\n"
+            "- APPS dan MONITORING mengikuti maksimal hari/bulan pada Settings.\n"
             "- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
-            "- Tukar jadwal harus tipe hari yang sama: weekday dengan weekday, weekend dengan weekend."
+            "- Tukar jadwal harus tipe hari yang sama."
         )
         bot.send_message(chat_id, help_text, parse_mode='Markdown', message_thread_id=thread_id)
 
@@ -599,19 +610,18 @@ def register_user_handlers(bot: telebot.TeleBot):
                         bot.answer_callback_query(call.id, f"❌ Tanggal ini sudah penuh ({max_limit} orang).", show_alert=True)
                         return
 
-                    # --- LOGIKA LAMA: Batasan dinamis per grup dari database ---
                     user_group = get_user_group(user_id)
                     max_hari_keys = {
-                        'INFRA': ('max_hari_infra', '10'),
-                        'APPS': ('max_hari_apps', '31'),
-                        'MONITORING': ('max_hari_monitoring', '31'),
+                        'INFRA_DELIVERY': (None, '1', 'Infra Delivery'),
+                        'INFRA_OPERATION': ('max_hari_infra_operation', '5', 'Infra Operation'),
+                        'APPS': ('max_hari_apps', '31', 'APPS'),
+                        'MONITORING': ('max_hari_monitoring', '31', 'MONITORING'),
                     }
-                    max_hari_key, max_hari_default = max_hari_keys.get(user_group, ('max_hari_apps', '31'))
-                    max_hari = int(get_setting(max_hari_key, max_hari_default))
-                    # Hitung pilihan saat ini di bulan yang sama dengan tanggal yang akan ditambahkan
+                    max_hari_key, max_hari_default, group_label = max_hari_keys.get(user_group, ('max_hari_apps', '31', 'APPS'))
+                    max_hari = int(max_hari_default if max_hari_key is None else get_setting(max_hari_key, max_hari_default))
                     pilihan_bulan_ini = {s for s in selections if datetime.strptime(s, '%Y-%m-%d').month == dt_obj_toggle.month}
                     if len(pilihan_bulan_ini) >= max_hari:
-                        bot.answer_callback_query(call.id, f"❌ Kuota maksimal {max_hari} hari/bulan untuk tim {user_group} telah tercapai.", show_alert=True)
+                        bot.answer_callback_query(call.id, f"❌ Kuota maksimal {max_hari} hari/bulan untuk tim {group_label} telah tercapai.", show_alert=True)
                         return
 
                 if date_str in selections: selections.remove(date_str)
@@ -631,32 +641,15 @@ def register_user_handlers(bot: telebot.TeleBot):
                 year, month = int(parts[2]), int(parts[3])
                 pilihan_final = list(selection_dict.get(user_id, {}).get('choices', []))
                 if mode == 'jadwal':
-                    is_valid, error_message = validate_weekend_monthly_limits(pilihan_final)
-                    if not is_valid:
-                        bot.answer_callback_query(call.id, f"❌ {error_message}", show_alert=True)
-                        return
-                    user_group = get_user_group(user_id)
-                    weekend_full = is_weekend_fallback_active_for_user(user_id, year, month)
-                    is_valid, error_message = validate_weekday_weekend_balance(pilihan_final, weekend_full=weekend_full)
-                    if not is_valid:
-                        bot.answer_callback_query(call.id, f"❌ {error_message}", show_alert=True)
-                        return
-                    update_success = update_user_jadwal_for_month(user_id, call.from_user.first_name, call.from_user.username, pilihan_final, year, month)
-                    if not update_success:
-                        bot.answer_callback_query(call.id, "❌ Gagal menyimpan jadwal. Mohon periksa pilihan Anda.", show_alert=True)
+                    result = update_user_jadwal_for_month(user_id, call.from_user.first_name, call.from_user.username, pilihan_final, year, month)
+                    if not result.ok:
+                        error_message = result.message or SAVE_ERROR_MESSAGES.get(result.error_code, 'Gagal menyimpan jadwal. Mohon periksa pilihan Anda.')
+                        bot.answer_callback_query(call.id, error_message, show_alert=True)
                         return
                     pesan = f"✅ Jadwal Anda untuk bulan {NAMA_BULAN[month]} {year} telah disimpan."
-                    
-                    # Sync ke Google Sheets untuk setiap tanggal yang dipilih
                     user_group = get_user_group(user_id)
                     for tanggal in pilihan_final:
-                        hari = get_hari_from_date(tanggal)
-                        sync_jadwal_to_sheets(
-                            tanggal=tanggal,
-                            hari=hari,
-                            username=call.from_user.username or call.from_user.first_name,
-                            group=user_group or 'UNKNOWN'
-                        )
+                        sync_jadwal_to_sheets(tanggal=tanggal, hari=get_hari_from_date(tanggal), username=call.from_user.username or call.from_user.first_name, group=user_group or 'UNKNOWN')
                 else: # cuti
                     set_user_absensi(user_id, pilihan_final, year, month) # Modifikasi kecil agar lebih aman
                     pesan = f"✅ Data cuti Anda untuk bulan {NAMA_BULAN[month]} {year} telah diperbarui."
@@ -705,21 +698,28 @@ def register_user_handlers(bot: telebot.TeleBot):
                 
                 pesan_konfirmasi = ""
                 if sub_mode == 'jadwal':
-                    # Pastikan fungsi ini ada di database.py
-                    rows_deleted = delete_user_jadwal_on_dates(user_id, pilihan_batal) 
-                    pesan_konfirmasi = f"✅ Berhasil membatalkan {rows_deleted} jadwal."
+                    result = delete_user_jadwal_on_dates(user_id, pilihan_batal)
+                    if not result.ok:
+                        if result.error_code == 'database_locked':
+                            pesan_err = result.message or 'Sistem sedang sibuk. Silakan coba beberapa saat lagi.'
+                        elif result.error_code == 'stale_schedule':
+                            pesan_err = 'Satu atau lebih jadwal yang dipilih sudah tidak tersedia.'
+                        else:
+                            pesan_err = result.message or 'Gagal membatalkan jadwal.'
+                        bot.answer_callback_query(call.id, f"❌ {pesan_err}", show_alert=True)
+                        return
+                    pesan_konfirmasi = f"✅ Berhasil membatalkan {result.rows_affected} jadwal."
                 elif sub_mode == 'cuti':
                     start_of_month = f"{year}-{month:02d}-01"; end_of_month = f"{year}-{month:02d}-{calendar.monthrange(year, month)[1]}"
                     cuti_sebelumnya = get_user_absensi_in_range(user_id, start_of_month, end_of_month)
                     cuti_tersisa = cuti_sebelumnya - set(pilihan_batal)
-                    set_user_absensi(user_id, list(cuti_tersisa))
+                    set_user_absensi(user_id, list(cuti_tersisa), year, month)
                     pesan_konfirmasi = f"✅ Berhasil membatalkan {len(pilihan_batal)} tanggal cuti."
 
                 if user_id in selection_dict: del selection_dict[user_id]
                 try: bot.delete_message(call.message.chat.id, call.message.message_id)
                 except ApiTelegramException: pass
                 bot.send_message(call.message.chat.id, pesan_konfirmasi, message_thread_id=thread_id)
-
         bot.answer_callback_query(call.id)
     
 def register_help_handler(bot: telebot.TeleBot):
@@ -740,9 +740,10 @@ def register_help_handler(bot: telebot.TeleBot):
                 "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
                 "*/guide* atau */panduan* - Menampilkan panduan ini.\n\n"
                 "📌 *Catatan aturan jadwal:*\n"
-                "- Setiap orang maksimal 2 jadwal weekday setiap bulan.\n"
-                "- Jika semua slot weekend team sudah penuh, boleh fallback maksimal 3 weekday.\n"
+                "- Infra Delivery wajib memilih tepat 1 jadwal per bulan saat menyimpan melalui /start.\n"
+                "- Infra Operation mengikuti maksimal hari/bulan yang diatur Admin (default 5).\n"
+                "- APPS dan MONITORING mengikuti maksimal hari/bulan pada Settings.\n"
                 "- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
-                "- Tukar jadwal harus tipe hari yang sama: weekday dengan weekday, weekend dengan weekend."
+                "- Tukar jadwal harus tipe hari yang sama."
             )
             bot.send_message(message.chat.id, help_text, parse_mode='Markdown', message_thread_id=message.message_thread_id)

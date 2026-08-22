@@ -59,7 +59,7 @@ def test_write_jadwal():
             hari='Rabu',
             username='@test_user',
             user_id=123456789,
-            group='INFRA',
+            group='INFRA_OPERATION',
             created_at='2026-03-31 10:00:00'
         )
 

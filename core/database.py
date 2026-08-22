@@ -1,28 +1,96 @@
 import sqlite3
 import os
+import re
 from datetime import datetime
 import calendar
 import pytz
 import contextlib
+from dataclasses import dataclass
+import time
 
 makassar_tz = pytz.timezone("Asia/Makassar")
 
 from config import DB_NAME
 
-GROUP_NAMES = ('INFRA', 'APPS', 'MONITORING')
+LOCK_RETRY_MESSAGE = 'Jadwal belum tersimpan karena sistem sedang dipakai. Silakan coba lagi.'
+MUTATION_MAX_ATTEMPTS = 3
+MUTATION_RETRY_DELAYS = (0.05, 0.10)
+MUTATION_BUSY_TIMEOUT_MS = 1000
+
+@dataclass(frozen=True)
+class MutationResult:
+    ok: bool
+    error_code: str | None = None
+    message: str | None = None
+    rows_affected: int = 0
+
+def _run_mutation_with_retry(operation):
+    for attempt in range(MUTATION_MAX_ATTEMPTS):
+        with connect_db() as conn:
+            conn.execute(f'PRAGMA busy_timeout = {MUTATION_BUSY_TIMEOUT_MS}')
+            try:
+                conn.execute('BEGIN IMMEDIATE')
+                result = operation(conn)
+                if result.ok:
+                    conn.commit()
+                else:
+                    conn.rollback()
+                return result
+            except sqlite3.OperationalError as exc:
+                conn.rollback()
+                if 'database is locked' not in str(exc).lower():
+                    return MutationResult(False, 'database_error', str(exc))
+                if attempt == MUTATION_MAX_ATTEMPTS - 1:
+                    return MutationResult(False, 'database_locked', LOCK_RETRY_MESSAGE)
+        time.sleep(MUTATION_RETRY_DELAYS[attempt])
+
+GROUP_NAMES = (
+    'INFRA_DELIVERY',
+    'INFRA_OPERATION',
+    'APPS',
+    'MONITORING',
+)
+GROUP_LABELS = {
+    'INFRA_DELIVERY': 'Infra Delivery',
+    'INFRA_OPERATION': 'Infra Operation',
+    'APPS': 'APPS',
+    'MONITORING': 'MONITORING',
+}
 LEGACY_GROUP_ALIASES = {
-    'CE': 'INFRA',
+    'CE': 'INFRA_OPERATION',
+    'INFRA': 'INFRA_OPERATION',
 }
 GROUP_QUOTA_SETTING_KEYS = {
-    'INFRA': 'kuota_infra',
+    'INFRA_DELIVERY': 'kuota_infra',
+    'INFRA_OPERATION': 'kuota_infra',
     'APPS': 'kuota_apps',
     'MONITORING': 'kuota_monitoring',
 }
 GROUP_DEFAULT_QUOTAS = {
-    'INFRA': 1,
+    'INFRA_DELIVERY': 1,
+    'INFRA_OPERATION': 1,
     'APPS': 1,
     'MONITORING': 1,
 }
+MONTHLY_LIMIT_SETTING_KEYS = {
+    'INFRA_OPERATION': 'max_hari_infra_operation',
+    'APPS': 'max_hari_apps',
+    'MONITORING': 'max_hari_monitoring',
+}
+MONTHLY_DEFAULT_LIMITS = {
+    'INFRA_DELIVERY': 1,
+    'INFRA_OPERATION': 5,
+    'APPS': 31,
+    'MONITORING': 31,
+}
+DEFAULT_SETTINGS = (
+    ('kuota_infra', '1', 'Jumlah orang Infra per hari untuk setiap divisi Infra'),
+    ('max_hari_infra_operation', '5', 'Maksimal hari standby per bulan untuk Infra Operation'),
+    ('kuota_apps', '1', 'Jumlah orang APPS per hari'),
+    ('max_hari_apps', '31', 'Maksimal hari standby per bulan untuk APPS'),
+    ('kuota_monitoring', '1', 'Jumlah orang Monitoring per hari'),
+    ('max_hari_monitoring', '31', 'Maksimal hari standby per bulan untuk Monitoring'),
+)
 ADMIN_ROLES = ('super_admin', 'admin', 'user')
 
 def normalize_admin_role(role):
@@ -63,7 +131,6 @@ def create_tables():
     """Membuat semua tabel yang diperlukan, termasuk 'user_groups'."""
     with connect_db() as conn:
         cur = conn.cursor()
-        # ... (tabel status_bulanan, jadwal, absensi, konfigurasi, tukar_requests tetap sama) ...
         cur.execute('''
         CREATE TABLE IF NOT EXISTS status_bulanan (
             id INTEGER PRIMARY KEY, tahun INTEGER NOT NULL, bulan INTEGER NOT NULL,
@@ -80,70 +147,42 @@ def create_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
             tanggal_absen TEXT NOT NULL, UNIQUE(user_id, tanggal_absen)
         )''')
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS konfigurasi (
+        cur.execute('''CREATE TABLE IF NOT EXISTS konfigurasi (
             kunci TEXT PRIMARY KEY, nilai TEXT NOT NULL
         )''')
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS tukar_requests (
+        cur.execute('''CREATE TABLE IF NOT EXISTS tukar_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_a_id INTEGER NOT NULL, user_a_username TEXT NOT NULL,
             user_b_id INTEGER NOT NULL, tanggal_a TEXT NOT NULL, tanggal_b TEXT NOT NULL,
             status TEXT NOT NULL CHECK(status IN ('PENDING', 'APPROVED', 'REJECTED')),
             waktu_request TEXT NOT NULL
         )''')
-        
-        # --- TABEL BARU ---
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS user_groups (
+        cur.execute('''CREATE TABLE IF NOT EXISTS user_groups (
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             telegram_username TEXT,
-            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'APPS', 'MONITORING'))
+            group_name TEXT NOT NULL CHECK(group_name IN ('INFRA_DELIVERY', 'INFRA_OPERATION', 'APPS', 'MONITORING'))
         )''')
         _ensure_user_groups_schema(cur)
-        
-        # --- TABEL SETTINGS (untuk kuota dinamis) ---
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            description TEXT
+        cur.execute('''CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY, value TEXT NOT NULL, description TEXT
         )''')
-        
-        # --- TABEL ADMIN USERS (untuk login web dashboard) ---
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS admin_users (
+        _init_default_settings(cur)
+        cur.execute('''CREATE TABLE IF NOT EXISTS admin_users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
+            username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'admin' CHECK(role IN ('super_admin', 'admin', 'user')),
             created_at TEXT NOT NULL
         )''')
         _ensure_admin_users_role_column(cur)
-        
-        # --- TABEL DAILY LIMITS (untuk batasan per hari) ---
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS daily_limits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tanggal TEXT NOT NULL UNIQUE,
-            max_assignments INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+        cur.execute('''CREATE TABLE IF NOT EXISTS daily_limits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, tanggal TEXT NOT NULL UNIQUE,
+            max_assignments INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
         )''')
-        
-        # --- TABEL AUDIT LOGS (untuk mencatat aktivitas admin) ---
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS audit_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL,
-            action TEXT NOT NULL,
-            description TEXT,
-            timestamp TEXT NOT NULL
+        cur.execute('''CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, action TEXT NOT NULL,
+            description TEXT, timestamp TEXT NOT NULL
         )''')
-
-        _migrate_ce_to_infra(cur)
-        
         conn.commit()
     print("Semua tabel (termasuk user_groups, settings, admin_users) berhasil diperiksa/dibuat.")
 
@@ -155,44 +194,35 @@ def _ensure_admin_users_role_column(cur):
         cur.execute("ALTER TABLE admin_users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
 
 def _ensure_user_groups_schema(cur):
-    """Pastikan constraint user_groups tidak lagi menerima team legacy CE."""
+    """Rebuild user_groups unless its ordered group constraint is canonical."""
     cur.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_groups'")
     table = cur.fetchone()
-    if not table or "'CE'" not in (table['sql'] or ''):
+    table_sql = (table['sql'] if table else '') or ''
+    match = re.search(r'group_name\s+IN\s*\((.*?)\)', table_sql, re.IGNORECASE | re.DOTALL)
+    values = tuple(re.findall(r"['\"]([^'\"]*)['\"]", match.group(1))) if match else ()
+    if values == GROUP_NAMES:
         return
-
     cur.execute("DROP TABLE IF EXISTS user_groups_new")
-    cur.execute('''
-    CREATE TABLE user_groups_new (
-        user_id INTEGER PRIMARY KEY,
-        username TEXT,
-        telegram_username TEXT,
-        group_name TEXT NOT NULL CHECK(group_name IN ('INFRA', 'APPS', 'MONITORING'))
+    cur.execute('''CREATE TABLE user_groups_new (
+        user_id INTEGER PRIMARY KEY, username TEXT, telegram_username TEXT,
+        group_name TEXT NOT NULL CHECK(group_name IN ('INFRA_DELIVERY', 'INFRA_OPERATION', 'APPS', 'MONITORING'))
     )''')
-    cur.execute("""
-        INSERT INTO user_groups_new (user_id, username, telegram_username, group_name)
-        SELECT user_id, username, telegram_username,
-               CASE WHEN group_name = 'CE' THEN 'INFRA' ELSE group_name END
-        FROM user_groups
-    """)
+    cur.execute("SELECT user_id, username, telegram_username, group_name FROM user_groups")
+    normalized_rows = []
+    for row in cur.fetchall():
+        canonical = normalize_group_name(row['group_name'])
+        if canonical not in GROUP_NAMES:
+            raise ValueError(f"Grup legacy tidak valid: {row['group_name']}")
+        normalized_rows.append((row['user_id'], row['username'], row['telegram_username'], canonical))
+    cur.executemany("INSERT INTO user_groups_new (user_id, username, telegram_username, group_name) VALUES (?, ?, ?, ?)", normalized_rows)
     cur.execute("DROP TABLE user_groups")
     cur.execute("ALTER TABLE user_groups_new RENAME TO user_groups")
 
-def _migrate_ce_to_infra(cur):
-    """Migrasi legacy: team CE sudah merger ke INFRA."""
-    cur.execute("UPDATE user_groups SET group_name = 'INFRA' WHERE group_name = 'CE'")
-
-    cur.execute("SELECT value FROM settings WHERE key = 'ce_merged_to_infra'")
-    if cur.fetchone():
-        cur.execute("DELETE FROM settings WHERE key IN ('kuota_ce', 'max_hari_ce')")
-        return
-
-    cur.execute(
-        "INSERT OR REPLACE INTO settings (key, value, description) VALUES (?, ?, ?)",
-        ('ce_merged_to_infra', '1', 'Legacy CE sudah dimigrasikan ke INFRA')
-    )
-    cur.execute("DELETE FROM settings WHERE key IN ('kuota_ce', 'max_hari_ce')")
-
+def _init_default_settings(cur):
+    """Insert missing canonical settings and remove obsolete legacy keys."""
+    for key, value, description in DEFAULT_SETTINGS:
+        cur.execute("INSERT OR IGNORE INTO settings (key, value, description) VALUES (?, ?, ?)", (key, value, description))
+    cur.execute("DELETE FROM settings WHERE key IN ('max_hari_infra', 'kuota_ce', 'max_hari_ce')")
 def set_user_group(user_id, username, telegram_username, group_name):
     """Menetapkan atau memperbarui grup untuk seorang pengguna."""
     group_name = normalize_group_name(group_name)
@@ -214,13 +244,19 @@ def delete_user_from_group(user_id):
         conn.commit()
         return cur.rowcount > 0
 
+def _get_user_group_with_conn(conn, user_id):
+    """Mengambil grup ternormalisasi dari seorang pengguna berdasarkan ID menggunakan connection aktif."""
+    cur = conn.cursor()
+    cur.execute("SELECT group_name FROM user_groups WHERE user_id = ?", (user_id,))
+    result = cur.fetchone()
+    if not result or not result['group_name']:
+        return None
+    return normalize_group_name(result['group_name'])
+
 def get_user_group(user_id):
     """Mengambil grup dari seorang pengguna berdasarkan ID."""
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT group_name FROM user_groups WHERE user_id = ?", (user_id,))
-        result = cur.fetchone()
-        return result['group_name'] if result else None
+        return _get_user_group_with_conn(conn, user_id)
 
 def get_jadwal_by_group(tahun, bulan, group_name):
     """Mengambil semua jadwal untuk grup tertentu dalam sebulan.
@@ -269,26 +305,49 @@ def get_konfigurasi():
         return {row['kunci']: row['nilai'] for row in cur.fetchall()}
 
 def update_user_jadwal_for_month(user_id, first_name, telegram_username, list_of_tanggal, tahun, bulan):
-    start_of_month = f"{tahun}-{bulan:02d}-01"; end_of_month = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
-    with connect_db() as conn:
+    """Atomically replace one user's schedule for a target month."""
+    start_of_month = f"{tahun}-{bulan:02d}-01"
+    end_of_month = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
+
+    def operation(conn):
+        group_name = _get_user_group_with_conn(conn, user_id)
+        if not group_name:
+            return MutationResult(False, 'invalid_group', 'Anda belum terdaftar di grup mana pun.')
+        monthly_limit = _get_monthly_limit_with_conn(conn, group_name)
         try:
-            cur = conn.cursor()
-            cur.execute("BEGIN TRANSACTION;")
-            weekend_valid, error_message = validate_weekend_monthly_limits(list_of_tanggal)
-            weekend_full = is_weekend_fallback_active_for_user(user_id, tahun, bulan)
-            balance_valid, balance_error = validate_weekday_weekend_balance(list_of_tanggal, weekend_full=weekend_full)
-            if not weekend_valid or not balance_valid:
-                error_message = error_message or balance_error
-                raise ValueError(error_message)
-            cur.execute("DELETE FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?", (user_id, start_of_month, end_of_month))
-            if list_of_tanggal:
-                data_to_insert = [(user_id, first_name, telegram_username, tgl) for tgl in list_of_tanggal]
-                cur.executemany("INSERT INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)", data_to_insert)
-            conn.commit()
-            return True
-        except Exception as e:
-            conn.rollback(); print(f"ERROR saat update_user_jadwal_for_month: {e}")
-            return False
+            normalized_dates = _normalize_month_dates(list_of_tanggal, tahun, bulan)
+        except ValueError as exc:
+            return MutationResult(False, 'invalid_dates', str(exc))
+
+        existing_rows = _get_user_jadwal_for_month_with_conn(conn, user_id, tahun, bulan)
+        excluded_rows = tuple((user_id, row['tanggal']) for row in existing_rows)
+        validation = _validate_month_candidate(
+            conn, user_id, group_name, normalized_dates, tahun, bulan,
+            excluded_rows=excluded_rows,
+        )
+        if not validation.ok:
+            return validation
+        if group_name != 'INFRA_DELIVERY' and len(normalized_dates) > monthly_limit:
+            return MutationResult(
+                False,
+                'monthly_limit',
+                f'Jumlah jadwal ({len(normalized_dates)}) melebihi batas bulanan divisi Anda ({monthly_limit}).',
+            )
+        if _find_bot_date_conflicts_with_conn(conn, user_id, normalized_dates):
+            return MutationResult(False, 'date_conflict')
+
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
+            (user_id, start_of_month, end_of_month),
+        )
+        cur.executemany(
+            "INSERT INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)",
+            [(user_id, first_name, telegram_username, tanggal) for tanggal in normalized_dates],
+        )
+        return MutationResult(True, rows_affected=len(normalized_dates))
+
+    return _run_mutation_with_retry(operation)
 
 def get_bulan_dibuka():
     with connect_db() as conn:
@@ -366,12 +425,15 @@ def set_user_absensi(user_id, list_of_tanggal, tahun, bulan):
         except Exception as e:
             conn.rollback(); print(f"ERROR saat set_user_absensi: {e}")
 
-def get_user_jadwal_for_month(user_id, tahun, bulan):
+def _get_user_jadwal_for_month_with_conn(conn, user_id, tahun, bulan):
     start_date = f"{tahun}-{bulan:02d}-01"; end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
+    cur = conn.cursor()
+    cur.execute("SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ? ORDER BY tanggal ASC", (user_id, start_date, end_date))
+    return cur.fetchall()
+
+def get_user_jadwal_for_month(user_id, tahun, bulan):
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ? ORDER BY tanggal ASC", (user_id, start_date, end_date))
-        return cur.fetchall()
+        return _get_user_jadwal_for_month_with_conn(conn, user_id, tahun, bulan)
 
 def get_jadwal_for_specific_date(tanggal_str):
     """Mengambil jadwal untuk tanggal tertentu dengan username dari user_groups."""
@@ -408,11 +470,14 @@ def create_tukar_request(user_a_id, user_a_username, user_b_id, tanggal_a, tangg
         conn.commit()
         return cur.lastrowid
 
+def _get_tukar_request_by_id_with_conn(conn, request_id):
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM tukar_requests WHERE id = ?", (request_id,))
+    return row_to_dict(cur.fetchone())
+
 def get_tukar_request_by_id(request_id):
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM tukar_requests WHERE id = ?", (request_id,))
-        return row_to_dict(cur.fetchone())
+        return _get_tukar_request_by_id_with_conn(conn, request_id)
 
 def validate_swap_date_type(tanggal_a, tanggal_b):
     """Pastikan tukar jadwal tidak mengubah tipe hari weekend/weekday."""
@@ -423,59 +488,124 @@ def validate_swap_date_type(tanggal_a, tanggal_b):
     return True, None
 
 def execute_swap(request_id):
-    """Menukar jadwal antara dua user. Username diambil dari user_groups."""
-    req = get_tukar_request_by_id(request_id)
-    if not req or req['status'] != 'PENDING': return False
-    try:
-        with connect_db() as conn:
-            cur = conn.cursor()
-            cur.execute("BEGIN TRANSACTION;")
-            # Ambil detail user dari user_groups (sumber tunggal)
-            user_b_details = cur.execute("SELECT username, telegram_username FROM user_groups WHERE user_id = ?", (req['user_b_id'],)).fetchone()
-            user_a_details = cur.execute("SELECT username, telegram_username FROM user_groups WHERE user_id = ?", (req['user_a_id'],)).fetchone()
-            if not user_a_details or not user_b_details: raise sqlite3.OperationalError("User details not found in user_groups.")
+    """Menukar jadwal antara dua user secara atomik."""
+    def operation(conn):
+        req = _get_tukar_request_by_id_with_conn(conn, request_id)
+        if not req or req['status'] != 'PENDING':
+            return MutationResult(False, 'stale_request', 'Permintaan tukar jadwal tidak ditemukan atau sudah tidak pending.')
 
-            date_type_valid, date_type_error = validate_swap_date_type(req['tanggal_a'], req['tanggal_b'])
-            if not date_type_valid:
-                raise ValueError(date_type_error)
+        tanggal_a = req['tanggal_a']
+        tanggal_b = req['tanggal_b']
 
-            affected_months = {
-                (datetime.strptime(req['tanggal_a'], '%Y-%m-%d').year, datetime.strptime(req['tanggal_a'], '%Y-%m-%d').month),
-                (datetime.strptime(req['tanggal_b'], '%Y-%m-%d').year, datetime.strptime(req['tanggal_b'], '%Y-%m-%d').month),
-            }
+        try:
+            dt_a = datetime.strptime(tanggal_a, '%Y-%m-%d').date()
+            dt_b = datetime.strptime(tanggal_b, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return MutationResult(False, 'invalid_dates', 'Format tanggal tidak valid.')
 
-            def get_dates_after_swap(user_id, tanggal_keluar, tanggal_masuk):
-                tanggal_list = []
-                for tahun, bulan in affected_months:
-                    start_date = f"{tahun}-{bulan:02d}-01"
-                    end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
-                    cur.execute(
-                        "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
-                        (user_id, start_date, end_date)
-                    )
-                    tanggal_list.extend(row['tanggal'] for row in cur.fetchall())
-                return [tanggal_masuk if tanggal == tanggal_keluar else tanggal for tanggal in tanggal_list]
+        if tanggal_a == tanggal_b:
+            return MutationResult(False, 'same_date', 'Tanggal yang ditukar tidak boleh sama.')
 
-            user_a_tanggal = get_dates_after_swap(req['user_a_id'], req['tanggal_a'], req['tanggal_b'])
-            user_b_tanggal = get_dates_after_swap(req['user_b_id'], req['tanggal_b'], req['tanggal_a'])
-            user_a_valid, user_a_error = validate_weekend_monthly_limits(user_a_tanggal)
-            user_b_valid, user_b_error = validate_weekend_monthly_limits(user_b_tanggal)
-            if not user_a_valid or not user_b_valid:
-                raise ValueError(user_a_error or user_b_error)
-            user_a_valid, user_a_error = validate_weekday_weekend_balance(user_a_tanggal)
-            user_b_valid, user_b_error = validate_weekday_weekend_balance(user_b_tanggal)
-            if not user_a_valid or not user_b_valid:
-                raise ValueError(user_a_error or user_b_error)
+        date_type_valid, date_type_error = validate_swap_date_type(tanggal_a, tanggal_b)
+        if not date_type_valid:
+            return MutationResult(False, 'invalid_date_type', date_type_error)
 
-            # Swap hanya user_id, username otomatis dari JOIN
-            cur.execute("UPDATE jadwal SET user_id = ?, username = ?, telegram_username = ? WHERE tanggal = ? AND user_id = ?", (req['user_b_id'], user_b_details['username'], user_b_details['telegram_username'], req['tanggal_a'], req['user_a_id']))
-            cur.execute("UPDATE jadwal SET user_id = ?, username = ?, telegram_username = ? WHERE tanggal = ? AND user_id = ?", (req['user_a_id'], user_a_details['username'], user_a_details['telegram_username'], req['tanggal_b'], req['user_b_id']))
-            cur.execute("UPDATE tukar_requests SET status = 'APPROVED' WHERE id = ?", (request_id,))
-            conn.commit()
-            return True
-    except Exception as e:
-        print(f"ERROR saat execute_swap: {e}")
-        return False
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM jadwal WHERE user_id = ? AND tanggal = ?", (req['user_a_id'], tanggal_a))
+        source_row_a = cur.fetchone()
+        cur.execute("SELECT * FROM jadwal WHERE user_id = ? AND tanggal = ?", (req['user_b_id'], tanggal_b))
+        source_row_b = cur.fetchone()
+
+        if not source_row_a or not source_row_b:
+            return MutationResult(False, 'stale_request', 'Jadwal asal untuk pertukaran sudah tidak tersedia.')
+
+        cur.execute("SELECT user_id, tanggal FROM jadwal WHERE tanggal = ?", (tanggal_a,))
+        rows_on_date_a = cur.fetchall()
+        remaining_a = [r for r in rows_on_date_a if not (r['user_id'] == req['user_a_id'] and r['tanggal'] == tanggal_a)]
+        if remaining_a:
+            return MutationResult(False, 'swap_conflict', f'Terdapat jadwal lain pada tanggal {tanggal_a}.')
+
+        cur.execute("SELECT user_id, tanggal FROM jadwal WHERE tanggal = ?", (tanggal_b,))
+        rows_on_date_b = cur.fetchall()
+        remaining_b = [r for r in rows_on_date_b if not (r['user_id'] == req['user_b_id'] and r['tanggal'] == tanggal_b)]
+        if remaining_b:
+            return MutationResult(False, 'swap_conflict', f'Terdapat jadwal lain pada tanggal {tanggal_b}.')
+
+        cur.execute("SELECT user_id, username, telegram_username, group_name FROM user_groups WHERE user_id = ?", (req['user_a_id'],))
+        user_a_info = cur.fetchone()
+        cur.execute("SELECT user_id, username, telegram_username, group_name FROM user_groups WHERE user_id = ?", (req['user_b_id'],))
+        user_b_info = cur.fetchone()
+
+        if not user_a_info or not user_b_info:
+            return MutationResult(False, 'user_not_found', 'Data user tidak ditemukan di user_groups.')
+
+        group_a = normalize_group_name(user_a_info['group_name'])
+        group_b = normalize_group_name(user_b_info['group_name'])
+
+        affected_months = {
+            (dt_a.year, dt_a.month),
+            (dt_b.year, dt_b.month),
+        }
+
+        excluded_source_rows = (
+            (req['user_a_id'], tanggal_a),
+            (req['user_b_id'], tanggal_b),
+        )
+
+        for yr, mo in affected_months:
+            start_date = f"{yr}-{mo:02d}-01"
+            end_date = f"{yr}-{mo:02d}-{calendar.monthrange(yr, mo)[1]}"
+
+            cur.execute("SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?", (req['user_a_id'], start_date, end_date))
+            user_a_existing = [r['tanggal'] for r in cur.fetchall()]
+
+            cur.execute("SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?", (req['user_b_id'], start_date, end_date))
+            user_b_existing = [r['tanggal'] for r in cur.fetchall()]
+
+            user_a_post = [t for t in user_a_existing if t != tanggal_a]
+            if dt_b.year == yr and dt_b.month == mo:
+                if tanggal_b in user_a_post:
+                    return MutationResult(False, 'duplicate_date', f'User A sudah memiliki jadwal pada tanggal {tanggal_b}.')
+                user_a_post.append(tanggal_b)
+
+            user_b_post = [t for t in user_b_existing if t != tanggal_b]
+            if dt_a.year == yr and dt_a.month == mo:
+                if tanggal_a in user_b_post:
+                    return MutationResult(False, 'duplicate_date', f'User B sudah memiliki jadwal pada tanggal {tanggal_a}.')
+                user_b_post.append(tanggal_a)
+
+            user_a_post = sorted(user_a_post)
+            user_b_post = sorted(user_b_post)
+
+            val_a = _validate_month_candidate(conn, req['user_a_id'], group_a, user_a_post, yr, mo, excluded_rows=excluded_source_rows)
+            if not val_a.ok:
+                return val_a
+
+            val_b = _validate_month_candidate(conn, req['user_b_id'], group_b, user_b_post, yr, mo, excluded_rows=excluded_source_rows)
+            if not val_b.ok:
+                return val_b
+
+        cur.execute(
+            "UPDATE jadwal SET user_id = ?, username = ?, telegram_username = ? WHERE user_id = ? AND tanggal = ?",
+            (req['user_b_id'], user_b_info['username'], user_b_info['telegram_username'], req['user_a_id'], tanggal_a)
+        )
+        if cur.rowcount != 1:
+            return MutationResult(False, 'stale_request', 'Gagal memperbarui jadwal User A.')
+
+        cur.execute(
+            "UPDATE jadwal SET user_id = ?, username = ?, telegram_username = ? WHERE user_id = ? AND tanggal = ?",
+            (req['user_a_id'], user_a_info['username'], user_a_info['telegram_username'], req['user_b_id'], tanggal_b)
+        )
+        if cur.rowcount != 1:
+            return MutationResult(False, 'stale_request', 'Gagal memperbarui jadwal User B.')
+
+        cur.execute("UPDATE tukar_requests SET status = 'APPROVED' WHERE id = ?", (request_id,))
+        if cur.rowcount != 1:
+            return MutationResult(False, 'stale_request', 'Gagal memperbarui status permintaan tukar jadwal.')
+
+        return MutationResult(True, rows_affected=2)
+
+    return _run_mutation_with_retry(operation)
 
 def update_tukar_request_status(request_id, status):
     with connect_db() as conn:
@@ -536,34 +666,57 @@ def get_users_with_schedule_in_range(start_date, end_date):
         return {row['user_id'] for row in cur.fetchall()}
         
 def delete_user_jadwal_on_dates(user_id, list_of_tanggal_to_delete):
-    """Menghapus jadwal pengguna pada tanggal-tanggal yang ditentukan."""
+    """Menghapus jadwal pengguna pada tanggal-tanggal yang ditentukan secara atomik."""
     if not list_of_tanggal_to_delete:
-        return 0
-    with connect_db() as conn:
+        return MutationResult(True, rows_affected=0)
+
+    def operation(conn):
+        seen = set()
+        parsed_dates = []
+        for tgl in list_of_tanggal_to_delete:
+            try:
+                dt = datetime.strptime(tgl, '%Y-%m-%d').date()
+            except (ValueError, TypeError):
+                return MutationResult(False, 'invalid_dates', f'Format tanggal tidak valid: {tgl}')
+            tgl_str = dt.strftime('%Y-%m-%d')
+            if tgl_str in seen:
+                return MutationResult(False, 'invalid_dates', f'Duplikat tanggal terdeteksi: {tgl_str}')
+            seen.add(tgl_str)
+            parsed_dates.append(tgl_str)
+
         cur = conn.cursor()
-        # Membuat placeholder (?) sebanyak jumlah tanggal yang akan dihapus
-        placeholders = ', '.join('?' for _ in list_of_tanggal_to_delete)
-        query = f"DELETE FROM jadwal WHERE user_id = ? AND tanggal IN ({placeholders})"
-        
-        # Gabungkan user_id dengan daftar tanggal untuk parameter query
-        params = [user_id] + list_of_tanggal_to_delete
-        
-        cur.execute(query, params)
-        conn.commit()
-        # Mengembalikan jumlah baris yang terhapus
-        return cur.rowcount
+        placeholders = ', '.join('?' for _ in parsed_dates)
+        query = f"SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal IN ({placeholders})"
+        cur.execute(query, [user_id] + parsed_dates)
+        existing_dates = {row['tanggal'] for row in cur.fetchall()}
+
+        if len(existing_dates) != len(parsed_dates):
+            return MutationResult(False, 'stale_schedule', 'Satu atau lebih jadwal yang akan dibatalkan sudah tidak tersedia.')
+
+        delete_query = f"DELETE FROM jadwal WHERE user_id = ? AND tanggal IN ({placeholders})"
+        cur.execute(delete_query, [user_id] + parsed_dates)
+        if cur.rowcount != len(parsed_dates):
+            return MutationResult(False, 'stale_schedule', 'Gagal menghapus jadwal yang diminta.')
+
+        return MutationResult(True, rows_affected=cur.rowcount)
+
+    return _run_mutation_with_retry(operation)
 
 # =============================================================================
 # SETTINGS FUNCTIONS (untuk kuota dinamis)
 # =============================================================================
 
+def _get_setting_with_conn(conn, key, default=None):
+    """Mengambil nilai setting dari database menggunakan connection aktif."""
+    cur = conn.cursor()
+    cur.execute("SELECT value FROM settings WHERE key = ?", (key,))
+    result = cur.fetchone()
+    return result['value'] if result else default
+
 def get_setting(key, default=None):
     """Mengambil nilai setting dari database."""
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT value FROM settings WHERE key = ?", (key,))
-        result = cur.fetchone()
-        return result['value'] if result else default
+        return _get_setting_with_conn(conn, key, default)
 
 def set_setting(key, value, description=None):
     """Menyimpan atau memperbarui setting."""
@@ -583,65 +736,77 @@ def get_all_settings():
         return {row['key']: {'value': row['value'], 'description': row['description']} for row in cur.fetchall()}
 
 def init_default_settings():
-    """Inisialisasi settings default jika belum ada."""
-    defaults = [
-        ('kuota_infra', '1', 'Jumlah orang INFRA per hari'),
-        ('max_hari_infra', '10', 'Maksimal hari standby per bulan untuk INFRA'),
-        ('kuota_apps', '1', 'Jumlah orang APPS per hari'),
-        ('max_hari_apps', '31', 'Maksimal hari standby per bulan untuk APPS'),
-        ('kuota_monitoring', '1', 'Jumlah orang Monitoring per hari'),
-        ('max_hari_monitoring', '31', 'Maksimal hari standby per bulan untuk Monitoring'),
-    ]
+    """Idempotent public wrapper for canonical settings initialization."""
     with connect_db() as conn:
-        cur = conn.cursor()
-        for key, value, desc in defaults:
-            cur.execute("SELECT 1 FROM settings WHERE key = ?", (key,))
-            if not cur.fetchone():
-                cur.execute("INSERT INTO settings (key, value, description) VALUES (?, ?, ?)", (key, value, desc))
+        _init_default_settings(conn.cursor())
         conn.commit()
     print("🔧 Default settings berhasil diinisialisasi.")
 
-def get_group_quota(group_name):
-    """Mengambil kuota harian untuk divisi tertentu."""
-    group_name = (group_name or '').upper()
-    setting_key = GROUP_QUOTA_SETTING_KEYS.get(group_name)
-    default_quota = GROUP_DEFAULT_QUOTAS.get(group_name, 1)
+def _get_group_quota_with_conn(conn, group_name):
+    """Mengambil kuota harian untuk divisi tertentu menggunakan connection aktif."""
+    canonical = normalize_group_name(group_name)
+    setting_key = GROUP_QUOTA_SETTING_KEYS.get(canonical)
+    default_quota = GROUP_DEFAULT_QUOTAS.get(canonical, 1)
     if not setting_key:
         return default_quota
-
     try:
-        return max(0, int(get_setting(setting_key, default_quota)))
+        return max(0, int(_get_setting_with_conn(conn, setting_key, default_quota)))
     except (TypeError, ValueError):
         return default_quota
 
+def get_group_quota(group_name):
+    """Mengambil kuota harian untuk divisi tertentu."""
+    with connect_db() as conn:
+        return _get_group_quota_with_conn(conn, group_name)
+
+def _get_monthly_limit_with_conn(conn, group_name):
+    """Mengambil batas bulanan untuk divisi tertentu menggunakan connection aktif."""
+    canonical = normalize_group_name(group_name)
+    if canonical == 'INFRA_DELIVERY':
+        return 1
+    key = MONTHLY_LIMIT_SETTING_KEYS.get(canonical)
+    default = MONTHLY_DEFAULT_LIMITS.get(canonical, 31)
+    try:
+        return max(0, int(_get_setting_with_conn(conn, key, default))) if key else default
+    except (TypeError, ValueError):
+        return default
+
+def get_monthly_limit_for_group(group_name):
+    with connect_db() as conn:
+        return _get_monthly_limit_with_conn(conn, group_name)
+
+def _get_group_assignment_count_for_date_with_conn(conn, tanggal, group_name, exclude_user_id=None):
+    """Menghitung jumlah jadwal divisi pada tanggal tertentu menggunakan connection aktif."""
+    group_name = normalize_group_name(group_name)
+    cur = conn.cursor()
+    params = [tanggal, group_name]
+    exclude_clause = ''
+    if exclude_user_id is not None:
+        exclude_clause = 'AND j.user_id != ?'
+        params.append(exclude_user_id)
+    cur.execute(f"""
+        SELECT COUNT(*) as count
+        FROM jadwal j
+        JOIN user_groups ug ON j.user_id = ug.user_id
+        WHERE j.tanggal = ? AND ug.group_name = ?
+        {exclude_clause}
+    """, params)
+    result = cur.fetchone()
+    return result['count'] if result else 0
+
 def get_group_assignment_count_for_date(tanggal, group_name, exclude_user_id=None):
     """Menghitung jumlah jadwal divisi pada tanggal tertentu."""
-    group_name = (group_name or '').upper()
     with connect_db() as conn:
-        cur = conn.cursor()
-        params = [tanggal, group_name]
-        exclude_clause = ''
-        if exclude_user_id is not None:
-            exclude_clause = 'AND j.user_id != ?'
-            params.append(exclude_user_id)
-
-        cur.execute(f"""
-            SELECT COUNT(*) as count
-            FROM jadwal j
-            JOIN user_groups ug ON j.user_id = ug.user_id
-            WHERE j.tanggal = ? AND ug.group_name = ?
-            {exclude_clause}
-        """, params)
-        result = cur.fetchone()
-        return result['count'] if result else 0
+        return _get_group_assignment_count_for_date_with_conn(conn, tanggal, group_name, exclude_user_id)
 
 def get_group_quota_status_for_date(tanggal):
     """Mengambil status kuota semua divisi untuk satu tanggal."""
     status = {}
     for group_name in GROUP_NAMES:
-        limit = get_group_quota(group_name)
-        current = get_group_assignment_count_for_date(tanggal, group_name)
-        status[group_name] = {
+        canonical = normalize_group_name(group_name)
+        limit = get_group_quota(canonical)
+        current = get_group_assignment_count_for_date(tanggal, canonical)
+        status[canonical] = {
             'limit': limit,
             'current': current,
             'remaining': max(0, limit - current),
@@ -862,14 +1027,22 @@ def set_daily_limit(tanggal, max_assignments):
         conn.commit()
         return cur.rowcount > 0
 
+def _get_daily_limit_with_conn(conn, tanggal, default_limit=1):
+    """Mengambil batasan untuk tanggal tertentu menggunakan connection aktif."""
+    cur = conn.cursor()
+    cur.execute("SELECT max_assignments FROM daily_limits WHERE tanggal = ?", (tanggal,))
+    result = cur.fetchone()
+    if result is not None:
+        try:
+            val = result['max_assignments'] if hasattr(result, '__getitem__') else result[0]
+            return int(val)
+        except (ValueError, TypeError, IndexError, KeyError):
+            return default_limit
+    return default_limit
 def get_daily_limit(tanggal, default_limit=1):
     """Mengambil batasan untuk tanggal tertentu. Jika tidak ada, kembalikan default."""
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT max_assignments FROM daily_limits WHERE tanggal = ?", (tanggal,))
-        result = cur.fetchone()
-        return result['max_assignments'] if result else default_limit
-
+        return _get_daily_limit_with_conn(conn, tanggal, default_limit)
 def get_all_daily_limits():
     """Mengambil semua batasan harian."""
     with connect_db() as conn:
@@ -885,14 +1058,24 @@ def delete_daily_limit(tanggal):
         conn.commit()
         return cur.rowcount > 0
 
+def _get_assignment_count_for_date_with_conn(conn, tanggal, excluded_rows=()):
+    """Menghitung jumlah assignment yang sudah ada untuk tanggal tertentu menggunakan connection aktif,
+    mengecualikan pasangan (user_id, tanggal) tertentu."""
+    cur = conn.cursor()
+    cur.execute("SELECT user_id, tanggal FROM jadwal WHERE tanggal = ?", (tanggal,))
+    rows = cur.fetchall()
+    if not rows:
+        return 0
+    if not excluded_rows:
+        return len(rows)
+    excluded_set = set(excluded_rows)
+    count = sum(1 for row in rows if (row['user_id'], row['tanggal']) not in excluded_set)
+    return count
+
 def get_assignment_count_for_date(tanggal):
     """Menghitung jumlah assignment yang sudah ada untuk tanggal tertentu."""
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) as count FROM jadwal WHERE tanggal = ?", (tanggal,))
-        result = cur.fetchone()
-        return result['count'] if result else 0
-
+        return _get_assignment_count_for_date_with_conn(conn, tanggal)
 def is_date_full(tanggal, default_limit=1):
     """Mengecek apakah tanggal sudah penuh berdasarkan batasan."""
     limit = get_daily_limit(tanggal, default_limit)
@@ -966,23 +1149,25 @@ def are_weekend_slots_full_for_group(tahun, bulan, group_name):
 
     return not any(weekend_availability.values())
 
-def is_weekend_fallback_active_for_user(user_id, tahun, bulan):
-    """Cek apakah user boleh fallback 3 weekday karena tipe weekend jatahnya habis.
+def _is_weekend_fallback_active_for_user_with_conn(conn, user_id, tahun, bulan, candidate_dates=None, excluded_rows=()):
+    """Cek apakah user boleh fallback 3 weekday karena tipe weekend jatahnya habis menggunakan connection aktif.
 
-    Jika user sudah punya Sabtu, maka hanya Minggu yang relevan. Jika user sudah punya
-    Minggu, maka hanya Sabtu yang relevan. Fallback aktif saat semua tipe weekend yang
-    masih boleh diambil user sudah tidak punya slot kosong secara global harian.
+    1. If candidate_dates is supplied, derive the user's already-selected weekend types from that final list;
+       otherwise read the user's rows through conn.
+    2. Determine remaining weekend types (5 and 6 minus selected types); if none remain, return False.
+    3. For every Saturday/Sunday in the month, read the daily limit and assignment count through conn,
+       excluding only the excluded_rows (user_id, tanggal) pairs that will disappear during the mutation.
+    4. Return True only when every date for each remaining type is at or above its limit.
     """
-    start_date = f"{tahun}-{bulan:02d}-01"
-    end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
-    with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
-            (user_id, start_date, end_date)
-        )
-        user_weekend_types = set()
-        for row in cur.fetchall():
+    user_weekend_types = set()
+    if candidate_dates is not None:
+        for tgl in candidate_dates:
+            key = get_weekend_monthly_limit_key(tgl)
+            if key is not None and key[0] == tahun and key[1] == bulan:
+                user_weekend_types.add(key[2])
+    else:
+        rows = _get_user_jadwal_for_month_with_conn(conn, user_id, tahun, bulan)
+        for row in rows:
             key = get_weekend_monthly_limit_key(row['tanggal'])
             if key is not None:
                 user_weekend_types.add(key[2])
@@ -999,12 +1184,80 @@ def is_weekend_fallback_active_for_user(user_id, tahun, bulan):
             continue
 
         tanggal = tanggal_obj.strftime('%Y-%m-%d')
-        limit = get_daily_limit(tanggal, 1)
-        current = get_assignment_count_for_date(tanggal)
+        limit = _get_daily_limit_with_conn(conn, tanggal, 1)
+        current = _get_assignment_count_for_date_with_conn(conn, tanggal, excluded_rows=excluded_rows)
         if current < limit:
             weekend_availability[weekday] = True
 
     return not any(weekend_availability.values())
+
+def is_weekend_fallback_active_for_user(user_id, tahun, bulan):
+    """Cek apakah user boleh fallback 3 weekday karena tipe weekend jatahnya habis.
+
+    Jika user sudah punya Sabtu, maka hanya Minggu yang relevan. Jika user sudah punya
+    Minggu, maka hanya Sabtu yang relevan. Fallback aktif saat semua tipe weekend yang
+    masih boleh diambil user sudah tidak punya slot kosong secara global harian.
+    """
+    with connect_db() as conn:
+        return _is_weekend_fallback_active_for_user_with_conn(conn, user_id, tahun, bulan)
+
+def _normalize_month_dates(list_of_tanggal, tahun, bulan):
+    """Parses %Y-%m-%d, rejects duplicates, rejects dates outside the target month,
+    and returns sorted unique strings, or raises ValueError."""
+    if not list_of_tanggal:
+        return []
+    seen = set()
+    normalized = []
+    for tgl in list_of_tanggal:
+        try:
+            dt = datetime.strptime(tgl, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            raise ValueError(f"Format tanggal tidak valid: {tgl}")
+        if dt.year != tahun or dt.month != bulan:
+            raise ValueError(f"Tanggal {tgl} di luar bulan target ({tahun}-{bulan:02d})")
+        tgl_str = dt.strftime('%Y-%m-%d')
+        if tgl_str in seen:
+            raise ValueError(f"Duplikat tanggal terdeteksi: {tgl_str}")
+        seen.add(tgl_str)
+        normalized.append(tgl_str)
+    normalized.sort()
+    return normalized
+
+def _find_bot_date_conflicts_with_conn(conn, user_id, dates):
+    """Selects every jadwal row on the selected dates where user_id != ?."""
+    if not dates:
+        return []
+    cur = conn.cursor()
+    placeholders = ', '.join('?' for _ in dates)
+    query = f"SELECT id, user_id, username, telegram_username, tanggal FROM jadwal WHERE tanggal IN ({placeholders}) AND user_id != ?"
+    params = list(dates) + [user_id]
+    cur.execute(query, params)
+    return [dict(row) for row in cur.fetchall()]
+
+def _validate_month_candidate(conn, user_id, group_name, normalized_dates, tahun, bulan, excluded_rows=()):
+    """Checks Delivery exact-one, other monthly limits, weekend monthly limits,
+    weekday/weekend balance using the connection-aware fallback, and returns the first specific MutationResult failure."""
+    canonical = normalize_group_name(group_name)
+    if canonical == 'INFRA_DELIVERY':
+        if len(normalized_dates) != 1:
+            return MutationResult(False, 'delivery_exact_one', 'Infra Delivery harus memiliki tepat 1 jadwal pada bulan ini.')
+    else:
+        monthly_limit = _get_monthly_limit_with_conn(conn, canonical)
+        if len(normalized_dates) > monthly_limit:
+            return MutationResult(False, 'monthly_limit', f'Jumlah jadwal ({len(normalized_dates)}) melebihi batas bulanan divisi Anda ({monthly_limit}).')
+
+    weekend_valid, error_msg = validate_weekend_monthly_limits(normalized_dates)
+    if not weekend_valid:
+        return MutationResult(False, 'weekend_limit', error_msg)
+
+    weekend_full = _is_weekend_fallback_active_for_user_with_conn(
+        conn, user_id, tahun, bulan, candidate_dates=normalized_dates, excluded_rows=excluded_rows
+    )
+    balance_valid, balance_msg = validate_weekday_weekend_balance(normalized_dates, weekend_full=weekend_full)
+    if not balance_valid:
+        return MutationResult(False, 'weekday_balance', balance_msg)
+
+    return MutationResult(True)
 
 def can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=None, limit=1):
     """Cek apakah user masih boleh mengambil tanggal weekend ini pada bulan terkait."""

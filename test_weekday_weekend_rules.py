@@ -83,7 +83,9 @@ def test_fallback_active_when_remaining_weekend_type_is_full():
 
     with patch("core.database.get_user_group", side_effect=fail_get_user_group), \
          patch("core.database.get_daily_limit", return_value=1), \
+         patch("core.database._get_daily_limit_with_conn", return_value=1), \
          patch("core.database.get_assignment_count_for_date", side_effect=fake_count), \
+         patch("core.database._get_assignment_count_for_date_with_conn", side_effect=lambda conn, t, excluded_rows=(): fake_count(t)), \
          patch("core.database.connect_db") as mock_connect:
         mock_connect.return_value.__enter__.return_value.cursor.return_value.fetchall.return_value = [
             {"tanggal": "2026-07-04"},  # User already has Saturday
@@ -102,7 +104,9 @@ def test_fallback_inactive_when_remaining_weekend_type_still_available():
 
     with patch("core.database.get_user_group", side_effect=fail_get_user_group), \
          patch("core.database.get_daily_limit", return_value=1), \
+         patch("core.database._get_daily_limit_with_conn", return_value=1), \
          patch("core.database.get_assignment_count_for_date", side_effect=fake_count), \
+         patch("core.database._get_assignment_count_for_date_with_conn", side_effect=lambda conn, t, excluded_rows=(): fake_count(t)), \
          patch("core.database.connect_db") as mock_connect:
         mock_connect.return_value.__enter__.return_value.cursor.return_value.fetchall.return_value = [
             {"tanggal": "2026-07-04"},  # User already has Saturday; 2026-07-26 Sunday open

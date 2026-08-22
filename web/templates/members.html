@@ -45,7 +45,8 @@
                     <div class="space-y-2 lg:col-span-2">
                         <label for="group_name" class="text-xs font-bold uppercase text-muted-foreground tracking-wider">Divisi</label>
                         <select id="group_name" name="group_name" required class="input focus:ring-primary/40">
-                            <option value="INFRA">INFRA</option>
+                            <option value="INFRA_DELIVERY">Infra Delivery</option>
+                            <option value="INFRA_OPERATION">Infra Operation</option>
                             <option value="APPS">APPS</option>
                             <option value="MONITORING">MONITORING</option>
                         </select>
@@ -61,11 +62,11 @@
 
     <!-- Group Cards Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-        
         {% set groups = [
-            ('INFRA', '🏗️', 'Infrastruktur & Jaringan', 'primary', members_infra),
-            ('APPS', '📱', 'Applications & Systems', 'purple-500', members_apps),
-            ('MONITORING', '👁️', 'Service Monitoring', 'teal-500', members_monitoring)
+            ('INFRA_DELIVERY', '🚚', 'Infra Delivery', 'primary', members_by_group['INFRA_DELIVERY']),
+            ('INFRA_OPERATION', '🏗️', 'Infra Operation', 'orange-500', members_by_group['INFRA_OPERATION']),
+            ('APPS', '📱', 'Applications & Systems', 'purple-500', members_by_group['APPS']),
+            ('MONITORING', '👁️', 'Service Monitoring', 'teal-500', members_by_group['MONITORING'])
         ] %}
 
         {% for group_id, icon, desc, color, members in groups %}
@@ -73,7 +74,7 @@
             <div class="card-header bg-{{ color }}/5 flex flex-row items-center gap-4">
                 <div class="w-12 h-12 rounded-xl bg-{{ color }}/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">{{ icon }}</div>
                 <div class="flex flex-col">
-                    <h3 class="text-lg font-bold leading-none">Divisi {{ group_id }}</h3>
+                    <h3 class="text-lg font-bold leading-none">{{ desc }}</h3>
                     <p class="text-xs text-muted-foreground mt-1 text-{{ color }}">{{ desc }}</p>
                 </div>
                 <div class="ml-auto text-[10px] font-black bg-{{ color }}/10 text-{{ color }} px-3 py-1 rounded-full uppercase tracking-widest">{{ members|length }} Anggota</div>
@@ -151,7 +152,8 @@
                         <div class="space-y-2">
                             <label for="edit_group_name" class="text-xs font-bold uppercase text-muted-foreground tracking-widest">Penugasan Divisi</label>
                             <select id="edit_group_name" name="group_name" required class="input focus:ring-primary/40 appearance-none bg-background">
-                                <option value="INFRA">INFRA</option>
+                                <option value="INFRA_DELIVERY">Infra Delivery</option>
+                                <option value="INFRA_OPERATION">Infra Operation</option>
                                 <option value="APPS">APPS</option>
                                 <option value="MONITORING">MONITORING</option>
                             </select>
