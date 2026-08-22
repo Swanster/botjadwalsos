@@ -20,6 +20,9 @@ credentials.json
 token.json
 config.py
 google_credentials.json
+.env
+.env.*
+!.env.example
 
 # IDE
 .vscode/
