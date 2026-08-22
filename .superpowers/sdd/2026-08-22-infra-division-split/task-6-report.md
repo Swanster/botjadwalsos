@@ -73,3 +73,15 @@ Post-commit verification found that the schedule JavaScript used `groupQuotas` a
 - Focused template assertion: `schedule template declarations and canonical order passed`.
 
 Follow-up fix commit: recorded after the original `f0b7aa5` commit.
+
+## Follow-up markup fix
+
+Restored the missing `flex flex-col` wrapper in each members group-card header so the existing heading, description, and closing tags are balanced. Removed the duplicated orphaned heading block introduced during the earlier template update.
+
+### Markup fix verification
+
+- `python test_web_weekend_override.py`: PASS; weekend assignments and exact duplicate rejection remained correct.
+- `pytest -q test_infra_division_split.py -k 'web or settings or group_input'`: `2 passed, 20 deselected in 0.16s`.
+- Deterministic members template assertion: `members card wrapper and canonical card assertions passed`.
+
+Markup fix commit: recorded after `189fbc4`.
