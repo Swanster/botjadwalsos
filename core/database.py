@@ -5,10 +5,44 @@ from datetime import datetime
 import calendar
 import pytz
 import contextlib
+from dataclasses import dataclass
+import time
 
 makassar_tz = pytz.timezone("Asia/Makassar")
 
 from config import DB_NAME
+
+LOCK_RETRY_MESSAGE = 'Jadwal belum tersimpan karena sistem sedang dipakai. Silakan coba lagi.'
+MUTATION_MAX_ATTEMPTS = 3
+MUTATION_RETRY_DELAYS = (0.05, 0.10)
+MUTATION_BUSY_TIMEOUT_MS = 1000
+
+@dataclass(frozen=True)
+class MutationResult:
+    ok: bool
+    error_code: str | None = None
+    message: str | None = None
+    rows_affected: int = 0
+
+def _run_mutation_with_retry(operation):
+    for attempt in range(MUTATION_MAX_ATTEMPTS):
+        with connect_db() as conn:
+            conn.execute(f'PRAGMA busy_timeout = {MUTATION_BUSY_TIMEOUT_MS}')
+            try:
+                conn.execute('BEGIN IMMEDIATE')
+                result = operation(conn)
+                if result.ok:
+                    conn.commit()
+                else:
+                    conn.rollback()
+                return result
+            except sqlite3.OperationalError as exc:
+                conn.rollback()
+                if 'database is locked' not in str(exc).lower():
+                    return MutationResult(False, 'database_error', str(exc))
+                if attempt == MUTATION_MAX_ATTEMPTS - 1:
+                    return MutationResult(False, 'database_locked', LOCK_RETRY_MESSAGE)
+        time.sleep(MUTATION_RETRY_DELAYS[attempt])
 
 GROUP_NAMES = (
     'INFRA_DELIVERY',
@@ -210,13 +244,19 @@ def delete_user_from_group(user_id):
         conn.commit()
         return cur.rowcount > 0
 
+def _get_user_group_with_conn(conn, user_id):
+    """Mengambil grup ternormalisasi dari seorang pengguna berdasarkan ID menggunakan connection aktif."""
+    cur = conn.cursor()
+    cur.execute("SELECT group_name FROM user_groups WHERE user_id = ?", (user_id,))
+    result = cur.fetchone()
+    if not result or not result['group_name']:
+        return None
+    return normalize_group_name(result['group_name'])
+
 def get_user_group(user_id):
     """Mengambil grup dari seorang pengguna berdasarkan ID."""
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT group_name FROM user_groups WHERE user_id = ?", (user_id,))
-        result = cur.fetchone()
-        return result['group_name'] if result else None
+        return _get_user_group_with_conn(conn, user_id)
 
 def get_jadwal_by_group(tahun, bulan, group_name):
     """Mengambil semua jadwal untuk grup tertentu dalam sebulan.
@@ -362,12 +402,15 @@ def set_user_absensi(user_id, list_of_tanggal, tahun, bulan):
         except Exception as e:
             conn.rollback(); print(f"ERROR saat set_user_absensi: {e}")
 
-def get_user_jadwal_for_month(user_id, tahun, bulan):
+def _get_user_jadwal_for_month_with_conn(conn, user_id, tahun, bulan):
     start_date = f"{tahun}-{bulan:02d}-01"; end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
+    cur = conn.cursor()
+    cur.execute("SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ? ORDER BY tanggal ASC", (user_id, start_date, end_date))
+    return cur.fetchall()
+
+def get_user_jadwal_for_month(user_id, tahun, bulan):
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ? ORDER BY tanggal ASC", (user_id, start_date, end_date))
-        return cur.fetchall()
+        return _get_user_jadwal_for_month_with_conn(conn, user_id, tahun, bulan)
 
 def get_jadwal_for_specific_date(tanggal_str):
     """Mengambil jadwal untuk tanggal tertentu dengan username dari user_groups."""
@@ -404,11 +447,14 @@ def create_tukar_request(user_a_id, user_a_username, user_b_id, tanggal_a, tangg
         conn.commit()
         return cur.lastrowid
 
+def _get_tukar_request_by_id_with_conn(conn, request_id):
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM tukar_requests WHERE id = ?", (request_id,))
+    return row_to_dict(cur.fetchone())
+
 def get_tukar_request_by_id(request_id):
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM tukar_requests WHERE id = ?", (request_id,))
-        return row_to_dict(cur.fetchone())
+        return _get_tukar_request_by_id_with_conn(conn, request_id)
 
 def validate_swap_date_type(tanggal_a, tanggal_b):
     """Pastikan tukar jadwal tidak mengubah tipe hari weekend/weekday."""
@@ -553,13 +599,17 @@ def delete_user_jadwal_on_dates(user_id, list_of_tanggal_to_delete):
 # SETTINGS FUNCTIONS (untuk kuota dinamis)
 # =============================================================================
 
+def _get_setting_with_conn(conn, key, default=None):
+    """Mengambil nilai setting dari database menggunakan connection aktif."""
+    cur = conn.cursor()
+    cur.execute("SELECT value FROM settings WHERE key = ?", (key,))
+    result = cur.fetchone()
+    return result['value'] if result else default
+
 def get_setting(key, default=None):
     """Mengambil nilai setting dari database."""
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT value FROM settings WHERE key = ?", (key,))
-        result = cur.fetchone()
-        return result['value'] if result else default
+        return _get_setting_with_conn(conn, key, default)
 
 def set_setting(key, value, description=None):
     """Menyimpan atau memperbarui setting."""
@@ -585,48 +635,62 @@ def init_default_settings():
         conn.commit()
     print("🔧 Default settings berhasil diinisialisasi.")
 
-def get_group_quota(group_name):
-    """Mengambil kuota harian untuk divisi tertentu."""
+def _get_group_quota_with_conn(conn, group_name):
+    """Mengambil kuota harian untuk divisi tertentu menggunakan connection aktif."""
     canonical = normalize_group_name(group_name)
     setting_key = GROUP_QUOTA_SETTING_KEYS.get(canonical)
     default_quota = GROUP_DEFAULT_QUOTAS.get(canonical, 1)
     if not setting_key:
         return default_quota
     try:
-        return max(0, int(get_setting(setting_key, default_quota)))
+        return max(0, int(_get_setting_with_conn(conn, setting_key, default_quota)))
     except (TypeError, ValueError):
         return default_quota
 
-def get_monthly_limit_for_group(group_name):
+def get_group_quota(group_name):
+    """Mengambil kuota harian untuk divisi tertentu."""
+    with connect_db() as conn:
+        return _get_group_quota_with_conn(conn, group_name)
+
+def _get_monthly_limit_with_conn(conn, group_name):
+    """Mengambil batas bulanan untuk divisi tertentu menggunakan connection aktif."""
     canonical = normalize_group_name(group_name)
     if canonical == 'INFRA_DELIVERY':
         return 1
     key = MONTHLY_LIMIT_SETTING_KEYS.get(canonical)
     default = MONTHLY_DEFAULT_LIMITS.get(canonical, 31)
     try:
-        return max(0, int(get_setting(key, default))) if key else default
+        return max(0, int(_get_setting_with_conn(conn, key, default))) if key else default
     except (TypeError, ValueError):
         return default
 
+def get_monthly_limit_for_group(group_name):
+    with connect_db() as conn:
+        return _get_monthly_limit_with_conn(conn, group_name)
+
+def _get_group_assignment_count_for_date_with_conn(conn, tanggal, group_name, exclude_user_id=None):
+    """Menghitung jumlah jadwal divisi pada tanggal tertentu menggunakan connection aktif."""
+    group_name = normalize_group_name(group_name)
+    cur = conn.cursor()
+    params = [tanggal, group_name]
+    exclude_clause = ''
+    if exclude_user_id is not None:
+        exclude_clause = 'AND j.user_id != ?'
+        params.append(exclude_user_id)
+    cur.execute(f"""
+        SELECT COUNT(*) as count
+        FROM jadwal j
+        JOIN user_groups ug ON j.user_id = ug.user_id
+        WHERE j.tanggal = ? AND ug.group_name = ?
+        {exclude_clause}
+    """, params)
+    result = cur.fetchone()
+    return result['count'] if result else 0
+
 def get_group_assignment_count_for_date(tanggal, group_name, exclude_user_id=None):
     """Menghitung jumlah jadwal divisi pada tanggal tertentu."""
-    group_name = normalize_group_name(group_name)
     with connect_db() as conn:
-        cur = conn.cursor()
-        params = [tanggal, group_name]
-        exclude_clause = ''
-        if exclude_user_id is not None:
-            exclude_clause = 'AND j.user_id != ?'
-            params.append(exclude_user_id)
-        cur.execute(f"""
-            SELECT COUNT(*) as count
-            FROM jadwal j
-            JOIN user_groups ug ON j.user_id = ug.user_id
-            WHERE j.tanggal = ? AND ug.group_name = ?
-            {exclude_clause}
-        """, params)
-        result = cur.fetchone()
-        return result['count'] if result else 0
+        return _get_group_assignment_count_for_date_with_conn(conn, tanggal, group_name, exclude_user_id)
 
 def get_group_quota_status_for_date(tanggal):
     """Mengambil status kuota semua divisi untuk satu tanggal."""
@@ -856,14 +920,22 @@ def set_daily_limit(tanggal, max_assignments):
         conn.commit()
         return cur.rowcount > 0
 
+def _get_daily_limit_with_conn(conn, tanggal, default_limit=1):
+    """Mengambil batasan untuk tanggal tertentu menggunakan connection aktif."""
+    cur = conn.cursor()
+    cur.execute("SELECT max_assignments FROM daily_limits WHERE tanggal = ?", (tanggal,))
+    result = cur.fetchone()
+    if result is not None:
+        try:
+            val = result['max_assignments'] if hasattr(result, '__getitem__') else result[0]
+            return int(val)
+        except (ValueError, TypeError, IndexError, KeyError):
+            return default_limit
+    return default_limit
 def get_daily_limit(tanggal, default_limit=1):
     """Mengambil batasan untuk tanggal tertentu. Jika tidak ada, kembalikan default."""
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT max_assignments FROM daily_limits WHERE tanggal = ?", (tanggal,))
-        result = cur.fetchone()
-        return result['max_assignments'] if result else default_limit
-
+        return _get_daily_limit_with_conn(conn, tanggal, default_limit)
 def get_all_daily_limits():
     """Mengambil semua batasan harian."""
     with connect_db() as conn:
@@ -879,14 +951,24 @@ def delete_daily_limit(tanggal):
         conn.commit()
         return cur.rowcount > 0
 
+def _get_assignment_count_for_date_with_conn(conn, tanggal, excluded_rows=()):
+    """Menghitung jumlah assignment yang sudah ada untuk tanggal tertentu menggunakan connection aktif,
+    mengecualikan pasangan (user_id, tanggal) tertentu."""
+    cur = conn.cursor()
+    cur.execute("SELECT user_id, tanggal FROM jadwal WHERE tanggal = ?", (tanggal,))
+    rows = cur.fetchall()
+    if not rows:
+        return 0
+    if not excluded_rows:
+        return len(rows)
+    excluded_set = set(excluded_rows)
+    count = sum(1 for row in rows if (row['user_id'], row['tanggal']) not in excluded_set)
+    return count
+
 def get_assignment_count_for_date(tanggal):
     """Menghitung jumlah assignment yang sudah ada untuk tanggal tertentu."""
     with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) as count FROM jadwal WHERE tanggal = ?", (tanggal,))
-        result = cur.fetchone()
-        return result['count'] if result else 0
-
+        return _get_assignment_count_for_date_with_conn(conn, tanggal)
 def is_date_full(tanggal, default_limit=1):
     """Mengecek apakah tanggal sudah penuh berdasarkan batasan."""
     limit = get_daily_limit(tanggal, default_limit)
@@ -960,23 +1042,25 @@ def are_weekend_slots_full_for_group(tahun, bulan, group_name):
 
     return not any(weekend_availability.values())
 
-def is_weekend_fallback_active_for_user(user_id, tahun, bulan):
-    """Cek apakah user boleh fallback 3 weekday karena tipe weekend jatahnya habis.
+def _is_weekend_fallback_active_for_user_with_conn(conn, user_id, tahun, bulan, candidate_dates=None, excluded_rows=()):
+    """Cek apakah user boleh fallback 3 weekday karena tipe weekend jatahnya habis menggunakan connection aktif.
 
-    Jika user sudah punya Sabtu, maka hanya Minggu yang relevan. Jika user sudah punya
-    Minggu, maka hanya Sabtu yang relevan. Fallback aktif saat semua tipe weekend yang
-    masih boleh diambil user sudah tidak punya slot kosong secara global harian.
+    1. If candidate_dates is supplied, derive the user's already-selected weekend types from that final list;
+       otherwise read the user's rows through conn.
+    2. Determine remaining weekend types (5 and 6 minus selected types); if none remain, return False.
+    3. For every Saturday/Sunday in the month, read the daily limit and assignment count through conn,
+       excluding only the excluded_rows (user_id, tanggal) pairs that will disappear during the mutation.
+    4. Return True only when every date for each remaining type is at or above its limit.
     """
-    start_date = f"{tahun}-{bulan:02d}-01"
-    end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
-    with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
-            (user_id, start_date, end_date)
-        )
-        user_weekend_types = set()
-        for row in cur.fetchall():
+    user_weekend_types = set()
+    if candidate_dates is not None:
+        for tgl in candidate_dates:
+            key = get_weekend_monthly_limit_key(tgl)
+            if key is not None and key[0] == tahun and key[1] == bulan:
+                user_weekend_types.add(key[2])
+    else:
+        rows = _get_user_jadwal_for_month_with_conn(conn, user_id, tahun, bulan)
+        for row in rows:
             key = get_weekend_monthly_limit_key(row['tanggal'])
             if key is not None:
                 user_weekend_types.add(key[2])
@@ -993,12 +1077,80 @@ def is_weekend_fallback_active_for_user(user_id, tahun, bulan):
             continue
 
         tanggal = tanggal_obj.strftime('%Y-%m-%d')
-        limit = get_daily_limit(tanggal, 1)
-        current = get_assignment_count_for_date(tanggal)
+        limit = _get_daily_limit_with_conn(conn, tanggal, 1)
+        current = _get_assignment_count_for_date_with_conn(conn, tanggal, excluded_rows=excluded_rows)
         if current < limit:
             weekend_availability[weekday] = True
 
     return not any(weekend_availability.values())
+
+def is_weekend_fallback_active_for_user(user_id, tahun, bulan):
+    """Cek apakah user boleh fallback 3 weekday karena tipe weekend jatahnya habis.
+
+    Jika user sudah punya Sabtu, maka hanya Minggu yang relevan. Jika user sudah punya
+    Minggu, maka hanya Sabtu yang relevan. Fallback aktif saat semua tipe weekend yang
+    masih boleh diambil user sudah tidak punya slot kosong secara global harian.
+    """
+    with connect_db() as conn:
+        return _is_weekend_fallback_active_for_user_with_conn(conn, user_id, tahun, bulan)
+
+def _normalize_month_dates(list_of_tanggal, tahun, bulan):
+    """Parses %Y-%m-%d, rejects duplicates, rejects dates outside the target month,
+    and returns sorted unique strings, or raises ValueError."""
+    if not list_of_tanggal:
+        return []
+    seen = set()
+    normalized = []
+    for tgl in list_of_tanggal:
+        try:
+            dt = datetime.strptime(tgl, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            raise ValueError(f"Format tanggal tidak valid: {tgl}")
+        if dt.year != tahun or dt.month != bulan:
+            raise ValueError(f"Tanggal {tgl} di luar bulan target ({tahun}-{bulan:02d})")
+        tgl_str = dt.strftime('%Y-%m-%d')
+        if tgl_str in seen:
+            raise ValueError(f"Duplikat tanggal terdeteksi: {tgl_str}")
+        seen.add(tgl_str)
+        normalized.append(tgl_str)
+    normalized.sort()
+    return normalized
+
+def _find_bot_date_conflicts_with_conn(conn, user_id, dates):
+    """Selects every jadwal row on the selected dates where user_id != ?."""
+    if not dates:
+        return []
+    cur = conn.cursor()
+    placeholders = ', '.join('?' for _ in dates)
+    query = f"SELECT id, user_id, username, telegram_username, tanggal FROM jadwal WHERE tanggal IN ({placeholders}) AND user_id != ?"
+    params = list(dates) + [user_id]
+    cur.execute(query, params)
+    return [dict(row) for row in cur.fetchall()]
+
+def _validate_month_candidate(conn, user_id, group_name, normalized_dates, tahun, bulan, excluded_rows=()):
+    """Checks Delivery exact-one, other monthly limits, weekend monthly limits,
+    weekday/weekend balance using the connection-aware fallback, and returns the first specific MutationResult failure."""
+    canonical = normalize_group_name(group_name)
+    if canonical == 'INFRA_DELIVERY':
+        if len(normalized_dates) != 1:
+            return MutationResult(False, 'delivery_exact_one', 'Infra Delivery harus memiliki tepat 1 jadwal pada bulan ini.')
+    else:
+        monthly_limit = _get_monthly_limit_with_conn(conn, canonical)
+        if len(normalized_dates) > monthly_limit:
+            return MutationResult(False, 'monthly_limit', f'Jumlah jadwal ({len(normalized_dates)}) melebihi batas bulanan divisi Anda ({monthly_limit}).')
+
+    weekend_valid, error_msg = validate_weekend_monthly_limits(normalized_dates)
+    if not weekend_valid:
+        return MutationResult(False, 'weekend_limit', error_msg)
+
+    weekend_full = _is_weekend_fallback_active_for_user_with_conn(
+        conn, user_id, tahun, bulan, candidate_dates=normalized_dates, excluded_rows=excluded_rows
+    )
+    balance_valid, balance_msg = validate_weekday_weekend_balance(normalized_dates, weekend_full=weekend_full)
+    if not balance_valid:
+        return MutationResult(False, 'weekday_balance', balance_msg)
+
+    return MutationResult(True)
 
 def can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=None, limit=1):
     """Cek apakah user masih boleh mengambil tanggal weekend ini pada bulan terkait."""
