@@ -140,13 +140,13 @@ def register_swap_handlers(bot: telebot.TeleBot):
             if user_id != req['user_b_id']:
                 bot.answer_callback_query(call.id, "Ini bukan permintaan untuk Anda.", show_alert=True)
                 return
-            tgl_a_obj = datetime.strptime(req['tanggal_a'], '%Y-%m-%d').date()
-            tgl_b_obj = datetime.strptime(req['tanggal_b'], '%Y-%m-%d').date()
             user_b_mention = f"[{call.from_user.first_name}](tg://user?id={call.from_user.id})"
             user_a_mention = f"[{req['user_a_username']}](tg://user?id={req['user_a_id']})"
             if action == 'approve':
                 result = execute_swap(request_id)
                 if result.ok:
+                    tgl_a_obj = datetime.strptime(req['tanggal_a'], '%Y-%m-%d').date()
+                    tgl_b_obj = datetime.strptime(req['tanggal_b'], '%Y-%m-%d').date()
                     pesan_final = (f"✅ Pertukaran Jadwal Disetujui!\n\n{user_a_mention} sekarang bertugas pada *{format_tanggal_indonesia(tgl_b_obj)}*.\n{user_b_mention} sekarang bertugas pada *{format_tanggal_indonesia(tgl_a_obj)}*.")
                     try: bot.edit_message_text(pesan_final, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
                     except: bot.send_message(call.message.chat.id, pesan_final, parse_mode='Markdown', message_thread_id=thread_id)
@@ -158,6 +158,7 @@ def register_swap_handlers(bot: telebot.TeleBot):
                         'delivery_exact_one': result.message or 'Infra Delivery harus memiliki tepat 1 jadwal pada bulan ini.',
                         'monthly_limit': result.message or 'Pertukaran melebihi batas jadwal bulanan.',
                         'same_date': 'Tanggal yang ditukar tidak boleh sama.',
+                        'invalid_dates': result.message or 'Format tanggal tidak valid.',
                         'invalid_date_type': result.message or 'Tipe hari tidak cocok.',
                         'weekend_limit': result.message or 'Pertukaran melanggar batas jadwal weekend.',
                         'weekday_balance': result.message or 'Pertukaran melanggar keseimbangan weekday/weekend.',
