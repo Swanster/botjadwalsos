@@ -697,21 +697,28 @@ def register_user_handlers(bot: telebot.TeleBot):
                 
                 pesan_konfirmasi = ""
                 if sub_mode == 'jadwal':
-                    # Pastikan fungsi ini ada di database.py
-                    rows_deleted = delete_user_jadwal_on_dates(user_id, pilihan_batal) 
-                    pesan_konfirmasi = f"✅ Berhasil membatalkan {rows_deleted} jadwal."
+                    result = delete_user_jadwal_on_dates(user_id, pilihan_batal)
+                    if not result.ok:
+                        if result.error_code == 'database_locked':
+                            pesan_err = result.message or 'Sistem sedang sibuk. Silakan coba beberapa saat lagi.'
+                        elif result.error_code == 'stale_schedule':
+                            pesan_err = 'Satu atau lebih jadwal yang dipilih sudah tidak tersedia.'
+                        else:
+                            pesan_err = result.message or 'Gagal membatalkan jadwal.'
+                        bot.answer_callback_query(call.id, f"❌ {pesan_err}", show_alert=True)
+                        return
+                    pesan_konfirmasi = f"✅ Berhasil membatalkan {result.rows_affected} jadwal."
                 elif sub_mode == 'cuti':
                     start_of_month = f"{year}-{month:02d}-01"; end_of_month = f"{year}-{month:02d}-{calendar.monthrange(year, month)[1]}"
                     cuti_sebelumnya = get_user_absensi_in_range(user_id, start_of_month, end_of_month)
                     cuti_tersisa = cuti_sebelumnya - set(pilihan_batal)
-                    set_user_absensi(user_id, list(cuti_tersisa))
+                    set_user_absensi(user_id, list(cuti_tersisa), year, month)
                     pesan_konfirmasi = f"✅ Berhasil membatalkan {len(pilihan_batal)} tanggal cuti."
 
                 if user_id in selection_dict: del selection_dict[user_id]
                 try: bot.delete_message(call.message.chat.id, call.message.message_id)
                 except ApiTelegramException: pass
                 bot.send_message(call.message.chat.id, pesan_konfirmasi, message_thread_id=thread_id)
-
         bot.answer_callback_query(call.id)
     
 def register_help_handler(bot: telebot.TeleBot):

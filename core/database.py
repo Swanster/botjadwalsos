@@ -488,59 +488,124 @@ def validate_swap_date_type(tanggal_a, tanggal_b):
     return True, None
 
 def execute_swap(request_id):
-    """Menukar jadwal antara dua user. Username diambil dari user_groups."""
-    req = get_tukar_request_by_id(request_id)
-    if not req or req['status'] != 'PENDING': return False
-    try:
-        with connect_db() as conn:
-            cur = conn.cursor()
-            cur.execute("BEGIN TRANSACTION;")
-            # Ambil detail user dari user_groups (sumber tunggal)
-            user_b_details = cur.execute("SELECT username, telegram_username FROM user_groups WHERE user_id = ?", (req['user_b_id'],)).fetchone()
-            user_a_details = cur.execute("SELECT username, telegram_username FROM user_groups WHERE user_id = ?", (req['user_a_id'],)).fetchone()
-            if not user_a_details or not user_b_details: raise sqlite3.OperationalError("User details not found in user_groups.")
+    """Menukar jadwal antara dua user secara atomik."""
+    def operation(conn):
+        req = _get_tukar_request_by_id_with_conn(conn, request_id)
+        if not req or req['status'] != 'PENDING':
+            return MutationResult(False, 'stale_request', 'Permintaan tukar jadwal tidak ditemukan atau sudah tidak pending.')
 
-            date_type_valid, date_type_error = validate_swap_date_type(req['tanggal_a'], req['tanggal_b'])
-            if not date_type_valid:
-                raise ValueError(date_type_error)
+        tanggal_a = req['tanggal_a']
+        tanggal_b = req['tanggal_b']
 
-            affected_months = {
-                (datetime.strptime(req['tanggal_a'], '%Y-%m-%d').year, datetime.strptime(req['tanggal_a'], '%Y-%m-%d').month),
-                (datetime.strptime(req['tanggal_b'], '%Y-%m-%d').year, datetime.strptime(req['tanggal_b'], '%Y-%m-%d').month),
-            }
+        try:
+            dt_a = datetime.strptime(tanggal_a, '%Y-%m-%d').date()
+            dt_b = datetime.strptime(tanggal_b, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return MutationResult(False, 'invalid_dates', 'Format tanggal tidak valid.')
 
-            def get_dates_after_swap(user_id, tanggal_keluar, tanggal_masuk):
-                tanggal_list = []
-                for tahun, bulan in affected_months:
-                    start_date = f"{tahun}-{bulan:02d}-01"
-                    end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
-                    cur.execute(
-                        "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
-                        (user_id, start_date, end_date)
-                    )
-                    tanggal_list.extend(row['tanggal'] for row in cur.fetchall())
-                return [tanggal_masuk if tanggal == tanggal_keluar else tanggal for tanggal in tanggal_list]
+        if tanggal_a == tanggal_b:
+            return MutationResult(False, 'same_date', 'Tanggal yang ditukar tidak boleh sama.')
 
-            user_a_tanggal = get_dates_after_swap(req['user_a_id'], req['tanggal_a'], req['tanggal_b'])
-            user_b_tanggal = get_dates_after_swap(req['user_b_id'], req['tanggal_b'], req['tanggal_a'])
-            user_a_valid, user_a_error = validate_weekend_monthly_limits(user_a_tanggal)
-            user_b_valid, user_b_error = validate_weekend_monthly_limits(user_b_tanggal)
-            if not user_a_valid or not user_b_valid:
-                raise ValueError(user_a_error or user_b_error)
-            user_a_valid, user_a_error = validate_weekday_weekend_balance(user_a_tanggal)
-            user_b_valid, user_b_error = validate_weekday_weekend_balance(user_b_tanggal)
-            if not user_a_valid or not user_b_valid:
-                raise ValueError(user_a_error or user_b_error)
+        date_type_valid, date_type_error = validate_swap_date_type(tanggal_a, tanggal_b)
+        if not date_type_valid:
+            return MutationResult(False, 'invalid_date_type', date_type_error)
 
-            # Swap hanya user_id, username otomatis dari JOIN
-            cur.execute("UPDATE jadwal SET user_id = ?, username = ?, telegram_username = ? WHERE tanggal = ? AND user_id = ?", (req['user_b_id'], user_b_details['username'], user_b_details['telegram_username'], req['tanggal_a'], req['user_a_id']))
-            cur.execute("UPDATE jadwal SET user_id = ?, username = ?, telegram_username = ? WHERE tanggal = ? AND user_id = ?", (req['user_a_id'], user_a_details['username'], user_a_details['telegram_username'], req['tanggal_b'], req['user_b_id']))
-            cur.execute("UPDATE tukar_requests SET status = 'APPROVED' WHERE id = ?", (request_id,))
-            conn.commit()
-            return True
-    except Exception as e:
-        print(f"ERROR saat execute_swap: {e}")
-        return False
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM jadwal WHERE user_id = ? AND tanggal = ?", (req['user_a_id'], tanggal_a))
+        source_row_a = cur.fetchone()
+        cur.execute("SELECT * FROM jadwal WHERE user_id = ? AND tanggal = ?", (req['user_b_id'], tanggal_b))
+        source_row_b = cur.fetchone()
+
+        if not source_row_a or not source_row_b:
+            return MutationResult(False, 'stale_request', 'Jadwal asal untuk pertukaran sudah tidak tersedia.')
+
+        cur.execute("SELECT user_id, tanggal FROM jadwal WHERE tanggal = ?", (tanggal_a,))
+        rows_on_date_a = cur.fetchall()
+        remaining_a = [r for r in rows_on_date_a if not (r['user_id'] == req['user_a_id'] and r['tanggal'] == tanggal_a)]
+        if remaining_a:
+            return MutationResult(False, 'swap_conflict', f'Terdapat jadwal lain pada tanggal {tanggal_a}.')
+
+        cur.execute("SELECT user_id, tanggal FROM jadwal WHERE tanggal = ?", (tanggal_b,))
+        rows_on_date_b = cur.fetchall()
+        remaining_b = [r for r in rows_on_date_b if not (r['user_id'] == req['user_b_id'] and r['tanggal'] == tanggal_b)]
+        if remaining_b:
+            return MutationResult(False, 'swap_conflict', f'Terdapat jadwal lain pada tanggal {tanggal_b}.')
+
+        cur.execute("SELECT user_id, username, telegram_username, group_name FROM user_groups WHERE user_id = ?", (req['user_a_id'],))
+        user_a_info = cur.fetchone()
+        cur.execute("SELECT user_id, username, telegram_username, group_name FROM user_groups WHERE user_id = ?", (req['user_b_id'],))
+        user_b_info = cur.fetchone()
+
+        if not user_a_info or not user_b_info:
+            return MutationResult(False, 'user_not_found', 'Data user tidak ditemukan di user_groups.')
+
+        group_a = normalize_group_name(user_a_info['group_name'])
+        group_b = normalize_group_name(user_b_info['group_name'])
+
+        affected_months = {
+            (dt_a.year, dt_a.month),
+            (dt_b.year, dt_b.month),
+        }
+
+        excluded_source_rows = (
+            (req['user_a_id'], tanggal_a),
+            (req['user_b_id'], tanggal_b),
+        )
+
+        for yr, mo in affected_months:
+            start_date = f"{yr}-{mo:02d}-01"
+            end_date = f"{yr}-{mo:02d}-{calendar.monthrange(yr, mo)[1]}"
+
+            cur.execute("SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?", (req['user_a_id'], start_date, end_date))
+            user_a_existing = [r['tanggal'] for r in cur.fetchall()]
+
+            cur.execute("SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?", (req['user_b_id'], start_date, end_date))
+            user_b_existing = [r['tanggal'] for r in cur.fetchall()]
+
+            user_a_post = [t for t in user_a_existing if t != tanggal_a]
+            if dt_b.year == yr and dt_b.month == mo:
+                if tanggal_b in user_a_post:
+                    return MutationResult(False, 'duplicate_date', f'User A sudah memiliki jadwal pada tanggal {tanggal_b}.')
+                user_a_post.append(tanggal_b)
+
+            user_b_post = [t for t in user_b_existing if t != tanggal_b]
+            if dt_a.year == yr and dt_a.month == mo:
+                if tanggal_a in user_b_post:
+                    return MutationResult(False, 'duplicate_date', f'User B sudah memiliki jadwal pada tanggal {tanggal_a}.')
+                user_b_post.append(tanggal_a)
+
+            user_a_post = sorted(user_a_post)
+            user_b_post = sorted(user_b_post)
+
+            val_a = _validate_month_candidate(conn, req['user_a_id'], group_a, user_a_post, yr, mo, excluded_rows=excluded_source_rows)
+            if not val_a.ok:
+                return val_a
+
+            val_b = _validate_month_candidate(conn, req['user_b_id'], group_b, user_b_post, yr, mo, excluded_rows=excluded_source_rows)
+            if not val_b.ok:
+                return val_b
+
+        cur.execute(
+            "UPDATE jadwal SET user_id = ?, username = ?, telegram_username = ? WHERE user_id = ? AND tanggal = ?",
+            (req['user_b_id'], user_b_info['username'], user_b_info['telegram_username'], req['user_a_id'], tanggal_a)
+        )
+        if cur.rowcount != 1:
+            return MutationResult(False, 'stale_request', 'Gagal memperbarui jadwal User A.')
+
+        cur.execute(
+            "UPDATE jadwal SET user_id = ?, username = ?, telegram_username = ? WHERE user_id = ? AND tanggal = ?",
+            (req['user_a_id'], user_a_info['username'], user_a_info['telegram_username'], req['user_b_id'], tanggal_b)
+        )
+        if cur.rowcount != 1:
+            return MutationResult(False, 'stale_request', 'Gagal memperbarui jadwal User B.')
+
+        cur.execute("UPDATE tukar_requests SET status = 'APPROVED' WHERE id = ?", (request_id,))
+        if cur.rowcount != 1:
+            return MutationResult(False, 'stale_request', 'Gagal memperbarui status permintaan tukar jadwal.')
+
+        return MutationResult(True, rows_affected=2)
+
+    return _run_mutation_with_retry(operation)
 
 def update_tukar_request_status(request_id, status):
     with connect_db() as conn:
@@ -601,22 +666,41 @@ def get_users_with_schedule_in_range(start_date, end_date):
         return {row['user_id'] for row in cur.fetchall()}
         
 def delete_user_jadwal_on_dates(user_id, list_of_tanggal_to_delete):
-    """Menghapus jadwal pengguna pada tanggal-tanggal yang ditentukan."""
+    """Menghapus jadwal pengguna pada tanggal-tanggal yang ditentukan secara atomik."""
     if not list_of_tanggal_to_delete:
-        return 0
-    with connect_db() as conn:
+        return MutationResult(True, rows_affected=0)
+
+    def operation(conn):
+        seen = set()
+        parsed_dates = []
+        for tgl in list_of_tanggal_to_delete:
+            try:
+                dt = datetime.strptime(tgl, '%Y-%m-%d').date()
+            except (ValueError, TypeError):
+                return MutationResult(False, 'invalid_dates', f'Format tanggal tidak valid: {tgl}')
+            tgl_str = dt.strftime('%Y-%m-%d')
+            if tgl_str in seen:
+                return MutationResult(False, 'invalid_dates', f'Duplikat tanggal terdeteksi: {tgl_str}')
+            seen.add(tgl_str)
+            parsed_dates.append(tgl_str)
+
         cur = conn.cursor()
-        # Membuat placeholder (?) sebanyak jumlah tanggal yang akan dihapus
-        placeholders = ', '.join('?' for _ in list_of_tanggal_to_delete)
-        query = f"DELETE FROM jadwal WHERE user_id = ? AND tanggal IN ({placeholders})"
-        
-        # Gabungkan user_id dengan daftar tanggal untuk parameter query
-        params = [user_id] + list_of_tanggal_to_delete
-        
-        cur.execute(query, params)
-        conn.commit()
-        # Mengembalikan jumlah baris yang terhapus
-        return cur.rowcount
+        placeholders = ', '.join('?' for _ in parsed_dates)
+        query = f"SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal IN ({placeholders})"
+        cur.execute(query, [user_id] + parsed_dates)
+        existing_dates = {row['tanggal'] for row in cur.fetchall()}
+
+        if len(existing_dates) != len(parsed_dates):
+            return MutationResult(False, 'stale_schedule', 'Satu atau lebih jadwal yang akan dibatalkan sudah tidak tersedia.')
+
+        delete_query = f"DELETE FROM jadwal WHERE user_id = ? AND tanggal IN ({placeholders})"
+        cur.execute(delete_query, [user_id] + parsed_dates)
+        if cur.rowcount != len(parsed_dates):
+            return MutationResult(False, 'stale_schedule', 'Gagal menghapus jadwal yang diminta.')
+
+        return MutationResult(True, rows_affected=cur.rowcount)
+
+    return _run_mutation_with_retry(operation)
 
 # =============================================================================
 # SETTINGS FUNCTIONS (untuk kuota dinamis)
