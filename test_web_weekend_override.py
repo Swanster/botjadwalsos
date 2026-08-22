@@ -23,6 +23,7 @@ SRC_DB = os.path.join(ROOT, "data", "jadwal_pro.db")
 DST_DB = os.path.join(_TMP, "jadwal_pro.db")
 shutil.copyfile(SRC_DB, DST_DB)
 config.DB_NAME = DST_DB
+db.DB_NAME = DST_DB
 db.create_tables()
 db.init_default_admin()
 
