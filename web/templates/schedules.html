@@ -210,9 +210,8 @@
 // Store jadwal data for modal
 const jadwalData = {{ jadwal_per_tanggal | tojson }};
 const allMembers = {{ all_members | tojson }};
-const dailyLimits = {{ daily_limits | tojson }};
-const groupQuotas = {{ group_quotas | tojson }};
-const groupOrder = ['INFRA', 'APPS', 'MONITORING'];
+const groupLabels = {{ group_labels | tojson }};
+const groupOrder = ['INFRA_DELIVERY', 'INFRA_OPERATION', 'APPS', 'MONITORING'];
 let activeDateStr = '';
 
 function getSelectedMember() {
@@ -232,7 +231,7 @@ function updateQuotaPanel(dateStr) {
     quotaStatusDiv.innerHTML = `
         <div class="text-[9px] font-black uppercase text-muted-foreground tracking-widest flex items-center justify-between">
             <span>Kuota Divisi</span>
-            ${selectedGroup ? `<span class="text-primary">${selectedGroup}</span>` : '<span>Pilih member</span>'}
+            ${selectedGroup ? `<span class="text-primary">${groupLabels[selectedGroup] || selectedGroup}</span>` : '<span>Pilih member</span>'}
         </div>
         <div class="grid grid-cols-2 gap-2">
             ${groupOrder.map(groupName => {
@@ -244,7 +243,7 @@ function updateQuotaPanel(dateStr) {
                 return `
                     <div class="rounded-xl border-2 ${colorClass} ${selectedClass} px-3 py-2">
                         <div class="flex items-center justify-between gap-2">
-                            <span class="text-[10px] font-black">${groupName}</span>
+                            <span class="text-[10px] font-black">${groupLabels[groupName] || groupName}</span>
                             <span class="text-xs font-black">${info.current}/${info.limit}</span>
                         </div>
                         <div class="mt-1 text-[9px] font-bold opacity-80">${info.is_full ? 'Penuh' : `${info.remaining} slot tersisa`}</div>
