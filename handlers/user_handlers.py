@@ -260,7 +260,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         user_id = user.id
         user_group = get_user_group(user_id)
         if not user_group:
-            bot.send_message(chat_id, "❌ Akun Anda belum terdaftar di grup manapun (INFRA/APPS/MONITORING). Silakan hubungi Admin untuk didaftarkan.", message_thread_id=thread_id)
+            bot.send_message(chat_id, "❌ Akun Anda belum terdaftar di grup manapun (INFRA_DELIVERY/INFRA_OPERATION/APPS/MONITORING). Silakan hubungi Admin untuk didaftarkan.", message_thread_id=thread_id)
             return
 
         jadwal_bulan_ini = get_jadwal_for_month(tahun, bulan)
@@ -404,10 +404,11 @@ def register_user_handlers(bot: telebot.TeleBot):
             "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
             "*/guide* atau */panduan* - Menampilkan panduan ini.\n\n"
             "📌 *Catatan aturan jadwal:*\n"
-            "- Setiap orang maksimal 2 jadwal weekday setiap bulan.\n"
-            "- Jika semua slot weekend team sudah penuh, boleh fallback maksimal 3 weekday.\n"
+            "- Infra Delivery wajib memilih tepat 1 jadwal per bulan saat menyimpan melalui /start.\n"
+            "- Infra Operation mengikuti maksimal hari/bulan yang diatur Admin (default 5).\n"
+            "- APPS dan MONITORING mengikuti maksimal hari/bulan pada Settings.\n"
             "- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
-            "- Tukar jadwal harus tipe hari yang sama: weekday dengan weekday, weekend dengan weekend."
+            "- Tukar jadwal harus tipe hari yang sama."
         )
         bot.send_message(chat_id, help_text, parse_mode='Markdown', message_thread_id=thread_id)
 
@@ -739,9 +740,10 @@ def register_help_handler(bot: telebot.TeleBot):
                 "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
                 "*/guide* atau */panduan* - Menampilkan panduan ini.\n\n"
                 "📌 *Catatan aturan jadwal:*\n"
-                "- Setiap orang maksimal 2 jadwal weekday setiap bulan.\n"
-                "- Jika semua slot weekend team sudah penuh, boleh fallback maksimal 3 weekday.\n"
+                "- Infra Delivery wajib memilih tepat 1 jadwal per bulan saat menyimpan melalui /start.\n"
+                "- Infra Operation mengikuti maksimal hari/bulan yang diatur Admin (default 5).\n"
+                "- APPS dan MONITORING mengikuti maksimal hari/bulan pada Settings.\n"
                 "- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
-                "- Tukar jadwal harus tipe hari yang sama: weekday dengan weekday, weekend dengan weekend."
+                "- Tukar jadwal harus tipe hari yang sama."
             )
             bot.send_message(message.chat.id, help_text, parse_mode='Markdown', message_thread_id=message.message_thread_id)

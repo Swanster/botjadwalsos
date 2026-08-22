@@ -535,3 +535,68 @@ def test_mutations_use_single_connection_and_pass_conn_to_private_helpers():
         assert connect_calls == 1, f"Expected 1 connection for cancellation mutation, got {connect_calls}"
         if seen_helper_conn_ids:
             assert all(cid == active_conn_ids[-1] for cid in seen_helper_conn_ids)
+
+
+# =============================================================================
+# 6. TASK 7 CONSUMER TESTS: REPORT, SCHEDULER & CSV NORMALIZATION
+# =============================================================================
+
+
+def test_csv_import_normalization_and_validation():
+    """Verify CSV group normalization maps INFRA to INFRA_OPERATION and accepts canonical groups."""
+    db.create_tables()
+    # Normalization helper
+    assert db.normalize_group_name('INFRA') == 'INFRA_OPERATION'
+    assert db.normalize_group_name('INFRA_DELIVERY') == 'INFRA_DELIVERY'
+    assert db.normalize_group_name('INFRA_OPERATION') == 'INFRA_OPERATION'
+    assert db.normalize_group_name('APPS') == 'APPS'
+    assert db.normalize_group_name('MONITORING') == 'MONITORING'
+
+    # Setting group through DB
+    db.set_user_group(101, 'User Legacy', 'user_legacy', 'INFRA')
+    assert db.get_user_group(101) == 'INFRA_OPERATION'
+
+
+def test_monthly_report_includes_canonical_group_labels():
+    """Verify monthly report structures contain group_label for all 4 groups."""
+    from core.monthly_report import build_monthly_report, format_monthly_report_for_telegram
+    db.create_tables()
+    db.set_user_group(1, 'Delivery User', 'deliv_user', 'INFRA_DELIVERY')
+    db.set_user_group(2, 'Op User', 'op_user', 'INFRA_OPERATION')
+    db.set_user_group(3, 'Apps User', 'apps_user', 'APPS')
+    db.set_user_group(4, 'Mon User', 'mon_user', 'MONITORING')
+
+    db.add_jadwal_manual(1, 'Delivery User', 'deliv_user', '2026-09-01')
+    db.add_jadwal_manual(2, 'Op User', 'op_user', '2026-09-02')
+
+    report = build_monthly_report(2026, 9)
+    assert len(report['per_group']) == 4
+    labels = {g['group_name']: g['group_label'] for g in report['per_group']}
+    assert labels['INFRA_DELIVERY'] == 'Infra Delivery'
+    assert labels['INFRA_OPERATION'] == 'Infra Operation'
+    assert labels['APPS'] == 'APPS'
+    assert labels['MONITORING'] == 'MONITORING'
+
+    telegram_text = format_monthly_report_for_telegram(report)
+    assert 'Infra Delivery' in telegram_text
+    assert 'Infra Operation' in telegram_text
+
+
+def test_scheduler_unfilled_reminder_division_targets():
+    """Verify unfilled-schedule reminder uses get_monthly_limit_for_group for each division."""
+    from core.scheduler import build_pesan_peringatan_pengisian_jadwal
+    db.create_tables()
+    db.buka_bulan_baru(2026, 9)
+    db.set_user_group(1, 'Delivery PIC', 'deliv_pic', 'INFRA_DELIVERY')
+    db.set_user_group(2, 'Op PIC', 'op_pic', 'INFRA_OPERATION')
+    db.set_setting('max_hari_infra_operation', '5')
+
+    # Delivery user has 0 (target 1), Op user has 1 (target 5)
+    db.add_jadwal_manual(2, 'Op PIC', 'op_pic', '2026-09-01')
+
+    pesan = build_pesan_peringatan_pengisian_jadwal()
+    assert pesan is not None
+    assert 'Infra Delivery' in pesan
+    assert 'Infra Operation' in pesan
+    assert 'target *1x*' in pesan
+    assert 'target *5x*' in pesan

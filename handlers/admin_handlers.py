@@ -42,10 +42,11 @@ def register_admin_handlers(bot: telebot.TeleBot):
             f"Periode pengisian jadwal standby untuk bulan *{nama_bulan_full} {tahun}* sudah dibuka.\n\n"
             f"Silakan isi jadwal melalui perintah /start.\n\n"
             f"📌 *Catatan aturan jadwal:*\n"
-            f"- Setiap orang maksimal 2 jadwal weekday setiap bulan.\n"
-            f"- Jika semua slot weekend team sudah penuh, boleh fallback maksimal 3 weekday.\n"
+            f"- Infra Delivery wajib memilih tepat 1 jadwal per bulan saat menyimpan melalui /start.\n"
+            f"- Infra Operation mengikuti maksimal hari/bulan yang diatur Admin (default 5).\n"
+            f"- APPS dan MONITORING mengikuti maksimal hari/bulan pada Settings.\n"
             f"- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
-            f"- Tukar jadwal harus tipe hari yang sama: weekday dengan weekday, weekend dengan weekend."
+            f"- Tukar jadwal harus tipe hari yang sama."
         )
         success_count = 0
         failed_users = []
@@ -236,7 +237,8 @@ def register_admin_handlers(bot: telebot.TeleBot):
         # Minta admin untuk mengirim file
         msg = bot.reply_to(message, "Silakan kirim file `.csv` Anda.\n\n"
                                     "Format kolom harus: `user_id,username,telegram_username,group_name`\n"
-                                    "Contoh: `123456,Budi,budisan,INFRA` atau `789012,Susi,susian,MONITORING`")
+                                    "Contoh: `123456,Budi,budisan,INFRA_OPERATION` atau `789012,Susi,susian,INFRA_DELIVERY`\n"
+                                    "Catatan: Nilai legacy `INFRA` tetap diterima dan dipetakan ke Infra Operation.")
         bot.register_next_step_handler(msg, process_csv_file)
 
     def process_csv_file(message):

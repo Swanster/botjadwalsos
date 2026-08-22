@@ -49,7 +49,7 @@
                     {% for group in report.per_group %}
                     <div class="flex items-center justify-between gap-3 p-3 rounded-lg border bg-secondary/20">
                         <div>
-                            <p class="font-black text-sm">{{ group.group_name }}</p>
+                            <p class="font-black text-sm">{{ group.group_label or group.group_name }}</p>
                             <p class="text-xs text-muted-foreground">{{ group.member_count }} member</p>
                         </div>
                         <div class="text-right">
@@ -71,7 +71,7 @@
                 {% if report.zero_users %}
                 <div class="flex flex-wrap gap-2">
                     {% for user in report.zero_users %}
-                    <span class="px-3 py-2 rounded-lg bg-red-500/10 text-red-600 border border-red-500/20 text-xs font-bold">{{ user.name }} - {{ user.group_name }}</span>
+                    <span class="px-3 py-2 rounded-lg bg-red-500/10 text-red-600 border border-red-500/20 text-xs font-bold">{{ user.name }} - {{ user.group_label or user.group_name }}</span>
                     {% endfor %}
                 </div>
                 {% else %}
@@ -101,7 +101,7 @@
                     {% for user in report.per_user %}
                     <tr class="border-b last:border-0">
                         <td class="py-3 pr-3 font-bold">{{ user.name }}</td>
-                        <td class="py-3 pr-3 text-muted-foreground">{{ user.group_name }}</td>
+                        <td class="py-3 pr-3 text-muted-foreground">{{ user.group_label or user.group_name }}</td>
                         <td class="py-3 pr-3 text-right font-black">{{ user.count }}</td>
                         <td class="py-3 pr-3 text-right">{{ user.saturday_count }}</td>
                         <td class="py-3 text-right">{{ user.sunday_count }}</td>
@@ -144,7 +144,7 @@
                 <div class="space-y-2">
                     {% for item in report.over_quota %}
                     <div class="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm">
-                        <span class="font-bold">{{ item.tanggal }} - {{ item.group_name }}</span>
+                        <span class="font-bold">{{ item.tanggal }} - {{ item.group_label or item.group_name }}</span>
                         <span class="font-black text-red-600">{{ item.current }}/{{ item.limit }}</span>
                     </div>
                     {% endfor %}

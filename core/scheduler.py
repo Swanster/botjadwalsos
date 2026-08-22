@@ -10,12 +10,14 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from config import GROUP_CHAT_ID, ALLOWED_TOPIC_ID
 from core.database import (
+    GROUP_NAMES, GROUP_LABELS,
     get_jadwal_for_specific_date, get_all_absensi_in_range, get_jadwal_by_group,
     get_all_users_in_group, format_tanggal_indonesia,
     get_all_registered_users, get_users_with_schedule_in_range,
     is_date_full, get_daily_limit, get_assignment_count_for_date,
     can_user_take_weekend_date, get_user_jadwal_for_month,
-    get_weekend_monthly_limit_key, get_bulan_dibuka
+    get_weekend_monthly_limit_key, get_bulan_dibuka,
+    get_group_quota, get_monthly_limit_for_group
 )
 from core.monthly_report import build_monthly_report, format_monthly_report_for_telegram
 from core.schedule_recap import generate_rekap_text
@@ -169,88 +171,55 @@ def kirim_peringatan_jadwal_mingguan(bot):
     next_week_end = next_week_start + timedelta(days=6)
 
     # Ambil jadwal yang sudah ada per grup
-    jadwal_infra = get_jadwal_by_group(next_week_start.year, next_week_start.month, 'INFRA')
-    jadwal_apps = get_jadwal_by_group(next_week_start.year, next_week_start.month, 'APPS')
-    jadwal_monitoring = get_jadwal_by_group(next_week_start.year, next_week_start.month, 'MONITORING')
+    jadwal_by_group = {
+        group_name: get_jadwal_by_group(next_week_start.year, next_week_start.month, group_name)
+        for group_name in GROUP_NAMES
+    }
 
     # Hitung slot terisi per hari untuk setiap grup
-    slot_terisi_infra = defaultdict(int)
-    for j in jadwal_infra: slot_terisi_infra[j['tanggal']] += 1
+    slot_terisi_by_group = {group_name: defaultdict(int) for group_name in GROUP_NAMES}
+    for group_name, jadwal_list in jadwal_by_group.items():
+        for j in jadwal_list:
+            slot_terisi_by_group[group_name][j['tanggal']] += 1
 
-    slot_terisi_apps = defaultdict(int)
-    for j in jadwal_apps: slot_terisi_apps[j['tanggal']] += 1
-
-    slot_terisi_monitoring = defaultdict(int)
-    for j in jadwal_monitoring: slot_terisi_monitoring[j['tanggal']] += 1
-
-    # Cari tanggal yang kuotanya kurang
-    tanggal_kurang_infra = []
-    tanggal_kurang_apps = []
-    tanggal_kurang_monitoring = []
+    # Cari tanggal yang kuotanya kurang per grup
+    tanggal_kurang_by_group = {group_name: [] for group_name in GROUP_NAMES}
     for i in range(7):
         current_date = next_week_start + timedelta(days=i)
         current_date_str = current_date.strftime('%Y-%m-%d')
         
         # Cek jika tanggal berada di bulan yang sama dengan awal minggu
         if current_date.month == next_week_start.month:
-            # Cek batasan harian (prioritas utama)
-            max_per_hari_infra = get_daily_limit(current_date_str, 1)
-            max_per_hari_apps = get_daily_limit(current_date_str, 1)
-            max_per_hari_monitoring = get_daily_limit(current_date_str, 1)
-                
-            if slot_terisi_infra.get(current_date_str, 0) < max_per_hari_infra:
-                tanggal_kurang_infra.append(current_date_str)
-            if slot_terisi_apps.get(current_date_str, 0) < max_per_hari_apps:
-                tanggal_kurang_apps.append(current_date_str)
-            if slot_terisi_monitoring.get(current_date_str, 0) < max_per_hari_monitoring:
-                tanggal_kurang_monitoring.append(current_date_str)
+            for group_name in GROUP_NAMES:
+                # Cek batasan harian grup
+                quota_group = get_group_quota(group_name)
+                max_per_hari = get_daily_limit(current_date_str, quota_group)
+                if slot_terisi_by_group[group_name].get(current_date_str, 0) < max_per_hari:
+                    tanggal_kurang_by_group[group_name].append(current_date_str)
 
-    # Kirim peringatan ke anggota grup INFRA jika perlu
-    if tanggal_kurang_infra:
-        users_infra = get_all_users_in_group('INFRA')
-        pesan_infra = "🔔 *Peringatan Jadwal INFRA*\n\nJadwal standby Anda untuk beberapa tanggal di minggu depan masih belum terisi penuh (kuota: 1 orang/hari). Tanggal yang masih kosong:\n\n"
-        for tgl in tanggal_kurang_infra:
-            tgl_obj = datetime.strptime(tgl, '%Y-%m-%d').date()
-            pesan_infra += f"- {format_tanggal_indonesia(tgl_obj)}\n"
-        pesan_infra += "\nMohon segera lengkapi jadwal Anda dengan menggunakan perintah `/start` di grup."
-        
-        for user in users_infra:
-            try:
-                bot.send_message(user['user_id'], pesan_infra, parse_mode='Markdown')
-            except Exception as e:
-                print(f"Gagal mengirim DM peringatan ke user INFRA {user['telegram_username']}: {e}")
+    # Kirim peringatan ke anggota masing-masing grup jika perlu
+    ada_kurang = False
+    for group_name in GROUP_NAMES:
+        tanggal_kurang = tanggal_kurang_by_group[group_name]
+        if tanggal_kurang:
+            ada_kurang = True
+            users = get_all_users_in_group(group_name)
+            label = GROUP_LABELS.get(group_name, group_name)
+            quota_group = get_group_quota(group_name)
+            pesan = f"🔔 *Peringatan Jadwal {label}*\n\nJadwal standby Anda untuk beberapa tanggal di minggu depan masih belum terisi penuh (kuota: {quota_group} orang/hari). Tanggal yang masih kosong:\n\n"
+            for tgl in tanggal_kurang:
+                tgl_obj = datetime.strptime(tgl, '%Y-%m-%d').date()
+                pesan += f"- {format_tanggal_indonesia(tgl_obj)}\n"
+            pesan += "\nMohon segera lengkapi jadwal Anda dengan menggunakan perintah `/start` di grup."
+            
+            for user in users:
+                try:
+                    bot.send_message(user['user_id'], pesan, parse_mode='Markdown')
+                except Exception as e:
+                    username_display = user.get('telegram_username') or user.get('username') or str(user.get('user_id'))
+                    print(f"Gagal mengirim DM peringatan ke user {label} {username_display}: {e}")
 
-    # Kirim peringatan ke anggota grup APPS jika perlu
-    if tanggal_kurang_apps:
-        users_apps = get_all_users_in_group('APPS')
-        pesan_apps = "🔔 *Peringatan Jadwal APPS*\n\nJadwal standby Anda untuk beberapa tanggal di minggu depan masih belum terisi penuh (kuota: 1 orang/hari). Tanggal yang masih kosong:\n\n"
-        for tgl in tanggal_kurang_apps:
-            tgl_obj = datetime.strptime(tgl, '%Y-%m-%d').date()
-            pesan_apps += f"- {format_tanggal_indonesia(tgl_obj)}\n"
-        pesan_apps += "\nMohon segera lengkapi jadwal Anda dengan menggunakan perintah `/start` di grup."
-
-        for user in users_apps:
-            try:
-                bot.send_message(user['user_id'], pesan_apps, parse_mode='Markdown')
-            except Exception as e:
-                print(f"Gagal mengirim DM peringatan ke user APPS {user['telegram_username']}: {e}")
-
-    # Kirim peringatan ke anggota grup MONITORING jika perlu
-    if tanggal_kurang_monitoring:
-        users_monitoring = get_all_users_in_group('MONITORING')
-        pesan_monitoring = "🔔 *Peringatan Jadwal MONITORING*\n\nJadwal standby Anda untuk beberapa tanggal di minggu depan masih belum terisi penuh (kuota: 1 orang/hari). Tanggal yang masih kosong:\n\n"
-        for tgl in tanggal_kurang_monitoring:
-            tgl_obj = datetime.strptime(tgl, '%Y-%m-%d').date()
-            pesan_monitoring += f"- {format_tanggal_indonesia(tgl_obj)}\n"
-        pesan_monitoring += "\nMohon segera lengkapi jadwal Anda dengan menggunakan perintah `/start` di grup."
-
-        for user in users_monitoring:
-            try:
-                bot.send_message(user['user_id'], pesan_monitoring, parse_mode='Markdown')
-            except Exception as e:
-                print(f"Gagal mengirim DM peringatan ke user MONITORING {user['telegram_username']}: {e}")
-    
-    if not tanggal_kurang_infra and not tanggal_kurang_apps and not tanggal_kurang_monitoring:
+    if not ada_kurang:
         print("Scheduler: Jadwal minggu depan untuk semua grup sudah penuh.")
     
     print("Scheduler: Pengecekan peringatan jadwal mingguan selesai.")
@@ -299,15 +268,15 @@ def build_pesan_peringatan_pengisian_jadwal():
         current_date += timedelta(days=1)
 
     kurang_isi_by_group = {}
-    for group_name in ('INFRA', 'APPS', 'MONITORING'):
+    for group_name in GROUP_NAMES:
         entries = []
         for user in get_all_users_in_group(group_name):
             jadwal_bulan = get_user_jadwal_for_month(user['user_id'], tahun, bulan)
             total = len(jadwal_bulan)
-            if total in (1, 2):
-                entries.append((total, user))
-        kurang_isi_by_group[group_name] = sorted(entries, key=lambda item: (item[0], item[1]['username'].lower()))
-
+            target = get_monthly_limit_for_group(group_name)
+            if total < target:
+                entries.append((total, target, user))
+        kurang_isi_by_group[group_name] = sorted(entries, key=lambda item: (item[0], item[2]['username'].lower()))
     if not tanggal_kosong and not any(kurang_isi_by_group.values()):
         return None
 
@@ -315,7 +284,7 @@ def build_pesan_peringatan_pengisian_jadwal():
     pesan = (
         "🔔 *Peringatan Pengisian Jadwal SOS*\n\n"
         f"Periode: *{nama_bulan} {tahun}*\n"
-        "Target: setiap anggota melengkapi jadwal sampai *3x* jika slot masih tersedia.\n\n"
+        "Target: setiap anggota melengkapi jadwal sesuai batas bulanan divisi jika slot masih tersedia.\n\n"
     )
 
     if tanggal_kosong:
@@ -328,23 +297,23 @@ def build_pesan_peringatan_pengisian_jadwal():
     else:
         pesan += "✅ Semua tanggal pada periode ini sudah terisi penuh.\n\n"
 
-    pesan += "👥 *Anggota yang jadwalnya belum 3x:*\n"
+    pesan += "👥 *Anggota yang jadwalnya belum lengkap:*\n"
     has_members = False
     for group_name, entries in kurang_isi_by_group.items():
         if not entries:
             continue
         has_members = True
-        pesan += f"\n*{group_name}*\n"
-        for total, user in entries:
-            kurang = 3 - total
-            pesan += f"• {_format_user_mention(user)} — baru *{total}x*, kurang *{kurang}x*\n"
+        label = GROUP_LABELS.get(group_name, group_name)
+        pesan += f"\n*{label}*\n"
+        for total, target, user in entries:
+            kurang = target - total
+            pesan += f"• {_format_user_mention(user)} — baru *{total}x*, target *{target}x* (kurang *{kurang}x*)\n"
 
     if not has_members:
-        pesan += "Semua anggota sudah minimal 3x.\n"
-
+        pesan += "Semua anggota sudah memenuhi target jadwal.\n"
     if tanggal_kosong:
         pesan += (
-            "\nSilakan anggota yang baru isi 1x atau 2x mengambil tanggal kosong di atas "
+            "\nSilakan anggota yang jadwalnya belum lengkap mengambil tanggal kosong di atas "
             "melalui `/start`."
         )
     else:
@@ -358,9 +327,9 @@ def build_pesan_peringatan_pengisian_jadwal():
 @retry_on_failure(retries=3, delay=60)
 def kirim_peringatan_jadwal_mingguan_kosong(bot):
     """
-    Mention anggota yang baru isi 1x/2x dan tampilkan tanggal kosong periode aktif.
+    Mention anggota yang jadwalnya belum lengkap dan tampilkan tanggal kosong periode aktif.
     """
-    print("Scheduler: Mengecek anggota yang belum melengkapi 3x jadwal...")
+    print("Scheduler: Mengecek anggota yang belum melengkapi target jadwal...")
     pesan = build_pesan_peringatan_pengisian_jadwal()
 
     if not pesan:
