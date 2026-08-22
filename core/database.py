@@ -310,6 +310,7 @@ def update_user_jadwal_for_month(user_id, first_name, telegram_username, list_of
     end_of_month = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
 
     def operation(conn):
+
         group_name = _get_user_group_with_conn(conn, user_id)
         if not group_name:
             return MutationResult(False, 'invalid_group', 'Anda belum terdaftar di grup mana pun.')
@@ -333,6 +334,7 @@ def update_user_jadwal_for_month(user_id, first_name, telegram_username, list_of
                 'monthly_limit',
                 f'Jumlah jadwal ({len(normalized_dates)}) melebihi batas bulanan divisi Anda ({monthly_limit}).',
             )
+
         if _find_bot_date_conflicts_with_conn(conn, user_id, normalized_dates):
             return MutationResult(False, 'date_conflict')
 
@@ -653,9 +655,9 @@ def get_all_registered_users():
     """Mengambil semua pengguna yang terdaftar di tabel user_groups."""
     with connect_db() as conn:
         cur = conn.cursor()
-        # Mengambil user_id dan telegram_username untuk mention
+        # Mengembalikan mapping biasa agar pemanggil dapat memakai akses indeks dan .get().
         cur.execute("SELECT user_id, telegram_username FROM user_groups")
-        return cur.fetchall()
+        return [row_to_dict(row) for row in cur.fetchall()]
 
 def get_users_with_schedule_in_range(start_date, end_date):
     """Mengambil daftar unik user_id yang memiliki jadwal dalam rentang tanggal."""
@@ -701,6 +703,7 @@ def delete_user_jadwal_on_dates(user_id, list_of_tanggal_to_delete):
         return MutationResult(True, rows_affected=cur.rowcount)
 
     return _run_mutation_with_retry(operation)
+
 
 # =============================================================================
 # SETTINGS FUNCTIONS (untuk kuota dinamis)
