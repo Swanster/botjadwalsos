@@ -145,14 +145,6 @@ def register_swap_handlers(bot: telebot.TeleBot):
             user_b_mention = f"[{call.from_user.first_name}](tg://user?id={call.from_user.id})"
             user_a_mention = f"[{req['user_a_username']}](tg://user?id={req['user_a_id']})"
             if action == 'approve':
-                is_valid_swap_type, swap_type_error = validate_swap_date_type(req['tanggal_a'], req['tanggal_b'])
-                if not is_valid_swap_type:
-                    update_tukar_request_status(request_id, 'REJECTED')
-                    pesan_final = f"❌ Pertukaran ditolak otomatis.\n\n{swap_type_error}"
-                    try: bot.edit_message_text(pesan_final, call.message.chat.id, call.message.message_id, parse_mode='Markdown')
-                    except: bot.send_message(call.message.chat.id, pesan_final, parse_mode='Markdown', message_thread_id=thread_id)
-                    return
-
                 result = execute_swap(request_id)
                 if result.ok:
                     pesan_final = (f"✅ Pertukaran Jadwal Disetujui!\n\n{user_a_mention} sekarang bertugas pada *{format_tanggal_indonesia(tgl_b_obj)}*.\n{user_b_mention} sekarang bertugas pada *{format_tanggal_indonesia(tgl_a_obj)}*.")
