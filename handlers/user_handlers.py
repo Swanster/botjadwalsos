@@ -10,6 +10,26 @@ import pytz
 import time
 
 from config import ALLOWED_TOPIC_ID
+import core.database as db
+from core.database import (
+    GROUP_NAMES,
+    get_bulan_dibuka, get_bulan_dibuka_list, get_konfigurasi, get_jadwal_for_month,
+    get_user_absensi_in_range, set_user_absensi, update_user_jadwal_for_month,
+    format_tanggal_indonesia, get_user_jadwal_for_month, get_jadwal_for_specific_date,
+    get_user_group, get_jadwal_by_group, get_all_users_in_group, get_all_absensi_in_range,
+    delete_user_jadwal_on_dates, get_setting,
+    is_date_full, get_daily_limit, get_weekend_monthly_limit_key,
+    validate_weekday_weekend_balance, validate_weekend_monthly_limits,
+    is_weekend_fallback_active_for_user
+)
+SAVE_ERROR_MESSAGES = {
+    'delivery_exact_one': 'Infra Delivery harus memiliki tepat 1 jadwal pada bulan ini.',
+    'monthly_limit': 'Jumlah jadwal melebihi batas bulanan divisi Anda.',
+    'date_conflict': 'Salah satu tanggal sudah diambil anggota lain.',
+    'weekend_limit': 'Batas jadwal Sabtu/Minggu per bulan terlampaui.',
+    'weekday_balance': 'Batas keseimbangan weekday/weekend terlampaui.',
+    'database_locked': db.LOCK_RETRY_MESSAGE,
+}
 from core.database import (
     GROUP_NAMES,
     get_bulan_dibuka, get_bulan_dibuka_list, get_konfigurasi, get_jadwal_for_month,

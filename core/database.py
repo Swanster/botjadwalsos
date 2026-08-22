@@ -305,26 +305,49 @@ def get_konfigurasi():
         return {row['kunci']: row['nilai'] for row in cur.fetchall()}
 
 def update_user_jadwal_for_month(user_id, first_name, telegram_username, list_of_tanggal, tahun, bulan):
-    start_of_month = f"{tahun}-{bulan:02d}-01"; end_of_month = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
-    with connect_db() as conn:
+    """Atomically replace one user's schedule for a target month."""
+    start_of_month = f"{tahun}-{bulan:02d}-01"
+    end_of_month = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
+
+    def operation(conn):
+        group_name = _get_user_group_with_conn(conn, user_id)
+        if not group_name:
+            return MutationResult(False, 'invalid_group', 'Anda belum terdaftar di grup mana pun.')
+        monthly_limit = _get_monthly_limit_with_conn(conn, group_name)
         try:
-            cur = conn.cursor()
-            cur.execute("BEGIN TRANSACTION;")
-            weekend_valid, error_message = validate_weekend_monthly_limits(list_of_tanggal)
-            weekend_full = is_weekend_fallback_active_for_user(user_id, tahun, bulan)
-            balance_valid, balance_error = validate_weekday_weekend_balance(list_of_tanggal, weekend_full=weekend_full)
-            if not weekend_valid or not balance_valid:
-                error_message = error_message or balance_error
-                raise ValueError(error_message)
-            cur.execute("DELETE FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?", (user_id, start_of_month, end_of_month))
-            if list_of_tanggal:
-                data_to_insert = [(user_id, first_name, telegram_username, tgl) for tgl in list_of_tanggal]
-                cur.executemany("INSERT INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)", data_to_insert)
-            conn.commit()
-            return True
-        except Exception as e:
-            conn.rollback(); print(f"ERROR saat update_user_jadwal_for_month: {e}")
-            return False
+            normalized_dates = _normalize_month_dates(list_of_tanggal, tahun, bulan)
+        except ValueError as exc:
+            return MutationResult(False, 'invalid_dates', str(exc))
+
+        existing_rows = _get_user_jadwal_for_month_with_conn(conn, user_id, tahun, bulan)
+        excluded_rows = tuple((user_id, row['tanggal']) for row in existing_rows)
+        validation = _validate_month_candidate(
+            conn, user_id, group_name, normalized_dates, tahun, bulan,
+            excluded_rows=excluded_rows,
+        )
+        if not validation.ok:
+            return validation
+        if group_name != 'INFRA_DELIVERY' and len(normalized_dates) > monthly_limit:
+            return MutationResult(
+                False,
+                'monthly_limit',
+                f'Jumlah jadwal ({len(normalized_dates)}) melebihi batas bulanan divisi Anda ({monthly_limit}).',
+            )
+        if _find_bot_date_conflicts_with_conn(conn, user_id, normalized_dates):
+            return MutationResult(False, 'date_conflict')
+
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
+            (user_id, start_of_month, end_of_month),
+        )
+        cur.executemany(
+            "INSERT INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)",
+            [(user_id, first_name, telegram_username, tanggal) for tanggal in normalized_dates],
+        )
+        return MutationResult(True, rows_affected=len(normalized_dates))
+
+    return _run_mutation_with_retry(operation)
 
 def get_bulan_dibuka():
     with connect_db() as conn:
