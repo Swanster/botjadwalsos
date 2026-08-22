@@ -26,6 +26,7 @@ config.DB_NAME = DST_DB
 db.DB_NAME = DST_DB
 db.create_tables()
 db.init_default_admin()
+db.add_admin_user(os.environ.get("TEST_ADMIN_USER", "admin"), os.environ.get("TEST_ADMIN_PW", "admin123"), "super_admin")
 
 from web.app import create_app
 
@@ -58,7 +59,8 @@ def main():
     sat_str = sat.strftime("%Y-%m-%d")
     sun_str = sun.strftime("%Y-%m-%d")
 
-    members = db.get_all_users_in_group("INFRA") + db.get_all_users_in_group("APPS") + db.get_all_users_in_group("MONITORING")
+    group_names = getattr(db, 'GROUP_NAMES', ('INFRA', 'APPS', 'MONITORING'))
+    members = [member for g in group_names for member in db.get_all_users_in_group(g)]
     assert len(members) >= 2, "need >=2 members to test"
     u1 = dict(members[0])
     u2 = dict(members[1])
