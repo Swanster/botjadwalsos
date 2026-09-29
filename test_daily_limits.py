@@ -2,13 +2,32 @@
 """
 Test script for daily assignment limits functionality
 """
+import os
+import shutil
+import tempfile
+
+import pytest
+
+import config
+from core import database as db
+
+# Test berjalan di salinan DB — jangan pernah menyentuh data live.
+ROOT = os.path.dirname(os.path.abspath(__file__))
+SRC_DB = os.path.join(ROOT, "data", "jadwal_pro.db")
+if not os.path.exists(SRC_DB):
+    pytest.skip("data/jadwal_pro.db tidak ditemukan", allow_module_level=True)
+_TMP = tempfile.mkdtemp(prefix="jadwal_daily_")
+DB_COPY = os.path.join(_TMP, "jadwal_pro.db")
+shutil.copyfile(SRC_DB, DB_COPY)
+config.DB_NAME = DB_COPY
+db.DB_NAME = DB_COPY
 
 from core.database import (
     set_daily_limit, get_daily_limit, get_all_daily_limits, delete_daily_limit,
     add_jadwal_manual, get_jadwal_for_specific_date, is_date_full
 )
 
-def test_daily_limits():
+def _run_daily_limits_checks():
     print("=== Testing Daily Assignment Limits ===\n")
     
     # Test 1: Set daily limits
@@ -64,6 +83,13 @@ def test_daily_limits():
     delete_daily_limit('2026-04-02')
     delete_daily_limit('2026-04-03')
     print("✓ Test completed successfully!")
+
+def test_daily_limits():
+    """Wrapper: hapus direktori temp meski assertion gagal (tidak bocor ke suite)."""
+    try:
+        _run_daily_limits_checks()
+    finally:
+        shutil.rmtree(_TMP, ignore_errors=True)
 
 if __name__ == "__main__":
     test_daily_limits()

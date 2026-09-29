@@ -12,13 +12,12 @@ import time
 from config import ALLOWED_TOPIC_ID
 import core.database as db
 from core.database import (
-    GROUP_NAMES,
     get_bulan_dibuka, get_bulan_dibuka_list, get_konfigurasi, get_jadwal_for_month,
     get_user_absensi_in_range, set_user_absensi, update_user_jadwal_for_month,
     format_tanggal_indonesia, get_user_jadwal_for_month, get_jadwal_for_specific_date,
-    get_user_group, get_jadwal_by_group, get_all_users_in_group, get_all_absensi_in_range,
+    get_user_group, get_all_users_in_group, get_all_absensi_in_range,
     delete_user_jadwal_on_dates, get_setting,
-    is_date_full, get_daily_limit, get_weekend_monthly_limit_key,
+    get_weekend_monthly_limit_key,
     validate_weekday_weekend_balance, validate_weekend_monthly_limits,
     is_weekend_fallback_active_for_user
 )
@@ -76,16 +75,18 @@ def is_weekend_monthly_locked(tanggal_str: str, pilihan_sementara) -> bool:
             return True
     return False
 
-def get_weekday_balance_message(weekend_full=False) -> str:
-    limit = 3 if weekend_full else 2
+def get_weekday_balance_message(weekend_full=False, weekday_limit=2) -> str:
+    limit = weekday_limit + (1 if weekend_full else 0)
     return f"❌ Anda sudah memilih maksimal {limit} jadwal weekday bulan ini."
 
-def is_weekday_balance_locked(tanggal_str: str, pilihan_sementara, weekend_full=False) -> bool:
+def is_weekday_balance_locked(tanggal_str: str, pilihan_sementara, weekend_full=False, weekday_limit=2) -> bool:
     if get_weekend_monthly_limit_key(tanggal_str) or tanggal_str in pilihan_sementara:
         return False
     simulated_choices = set(pilihan_sementara)
     simulated_choices.add(tanggal_str)
-    is_valid, _ = validate_weekday_weekend_balance(simulated_choices, weekend_full=weekend_full)
+    is_valid, _ = validate_weekday_weekend_balance(
+        simulated_choices, weekday_limit=weekday_limit, weekend_full=weekend_full
+    )
     return not is_valid
 
 def create_reason_button(label: str, reason: str, tanggal_str: str) -> InlineKeyboardButton:
@@ -114,12 +115,9 @@ def create_calendar(mode, user_id, year, month):
         user_group = get_user_group(user_id)
         if not user_group:
             return "❌ Anda belum terdaftar di grup mana pun. Silakan hubungi admin."
-        slot_terisi_by_group = {}
-        for group_name in GROUP_NAMES:
-            slot_terisi = defaultdict(int)
-            for j in get_jadwal_by_group(year, month, group_name):
-                slot_terisi[j['tanggal']] += 1
-            slot_terisi_by_group[group_name] = slot_terisi
+        # Invariant per bulan: sekali dihitung, bukan per tanggal.
+        weekday_allowance = db.get_weekday_allowance_for_group(user_group)
+        weekend_full = is_weekend_fallback_active_for_user(user_id, year, month)
         absensi_user = get_user_absensi_in_range(user_id, start_of_month, end_of_month)
     elif mode == 'cuti':
         pilihan_sementara = user_cuti_selections.get(user_id, {}).get('choices', set())
@@ -169,15 +167,15 @@ def create_calendar(mode, user_id, year, month):
                 if mode == 'jadwal':
                     if current_date_str in absensi_user:
                         row_buttons.append(create_reason_button("⛔️", "absen", current_date_str)); continue
-                    
-                    # Cek batasan harian (prioritas utama)
-                    max_per_hari = get_daily_limit(current_date_str, 1)  # Default 1 jika tidak ada setting
-                    jumlah_terisi = slot_terisi_by_group.get(user_group, {}).get(current_date_str, 0)
-                    
-                    is_penuh = jumlah_terisi >= max_per_hari
-                    weekend_full = is_weekend_fallback_active_for_user(user_id, year, month)
+
+                    # Gerbang tampilan sejalan backend: satu-per-tanggal dan
+                    # jatah weekday turunan Maksimal Hari/Bulan grup.
+                    is_penuh = db.has_other_user_assignment(current_date_str, user_id)
                     is_weekend_terkunci = is_weekend_monthly_locked(current_date_str, pilihan_sementara)
-                    is_weekday_balance_terkunci = is_weekday_balance_locked(current_date_str, pilihan_sementara, weekend_full=weekend_full)
+                    is_weekday_balance_terkunci = is_weekday_balance_locked(
+                        current_date_str, pilihan_sementara,
+                        weekend_full=weekend_full, weekday_limit=weekday_allowance,
+                    )
 
                     if current_date_str in pilihan_sementara: label = f"✅{label}"
                     elif is_penuh: row_buttons.append(create_reason_button("❌", "full", current_date_str)); continue
@@ -491,12 +489,17 @@ def register_user_handlers(bot: telebot.TeleBot):
         if reason == 'absen':
             message_text = "Tanggal ini terkunci karena Anda menandai cuti/tidak tersedia."
         elif reason == 'full':
-            max_limit = get_daily_limit(tanggal_str, 1)
-            message_text = f"Tanggal ini sudah penuh ({max_limit} orang)."
+            message_text = "Tanggal ini sudah diambil anggota lain."
         elif reason == 'weekend':
             message_text = get_weekend_limit_message(tanggal_str)
         elif reason == 'weekdaybalance':
-            message_text = get_weekday_balance_message()
+            try:
+                dt_reason = datetime.strptime(tanggal_str, '%Y-%m-%d')
+                weekend_full_reason = is_weekend_fallback_active_for_user(call.from_user.id, dt_reason.year, dt_reason.month)
+            except ValueError:
+                weekend_full_reason = False
+            weekday_allowance_reason = db.get_weekday_allowance_for_group(get_user_group(call.from_user.id))
+            message_text = get_weekday_balance_message(weekend_full_reason, weekday_limit=weekday_allowance_reason)
         else:
             message_text = "Tanggal ini tidak bisa dipilih."
 
@@ -600,17 +603,23 @@ def register_user_handlers(bot: telebot.TeleBot):
                     dt_obj_toggle = datetime.strptime(date_str, '%Y-%m-%d')
                     weekend_full = is_weekend_fallback_active_for_user(user_id, dt_obj_toggle.year, dt_obj_toggle.month)
 
-                    if is_weekday_balance_locked(date_str, selections, weekend_full=weekend_full):
-                        bot.answer_callback_query(call.id, get_weekday_balance_message(weekend_full), show_alert=True)
-                        return
-
-                    # --- LOGIKA BARU: Cek batasan harian ---
-                    if is_date_full(date_str, 1):
-                        max_limit = get_daily_limit(date_str, 1)
-                        bot.answer_callback_query(call.id, f"❌ Tanggal ini sudah penuh ({max_limit} orang).", show_alert=True)
-                        return
-
                     user_group = get_user_group(user_id)
+                    weekday_allowance = db.get_weekday_allowance_for_group(user_group)
+
+                    if is_weekday_balance_locked(date_str, selections, weekend_full=weekend_full, weekday_limit=weekday_allowance):
+                        bot.answer_callback_query(
+                            call.id,
+                            get_weekday_balance_message(weekend_full=weekend_full, weekday_limit=weekday_allowance),
+                            show_alert=True,
+                        )
+                        return
+
+                    # Aturan satu-per-tanggal (sejalan date_conflict di save):
+                    # tolak tanggal yang sudah diambil anggota lain.
+                    if db.has_other_user_assignment(date_str, user_id):
+                        bot.answer_callback_query(call.id, "❌ Tanggal ini sudah diambil anggota lain.", show_alert=True)
+                        return
+
                     max_hari_keys = {
                         'INFRA_DELIVERY': (None, '1', 'Infra Delivery'),
                         'INFRA_OPERATION': ('max_hari_infra_operation', '5', 'Infra Operation'),

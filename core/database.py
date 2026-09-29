@@ -778,6 +778,49 @@ def get_monthly_limit_for_group(group_name):
     with connect_db() as conn:
         return _get_monthly_limit_with_conn(conn, group_name)
 
+WEEKEND_MONTHLY_SLOTS = 2  # 1 Sabtu + 1 Minggu per bulan (validate_weekend_monthly_limits)
+
+def _get_weekday_allowance_with_conn(conn, group_name):
+    """Jatah weekday per bulan (turunan Maksimal Hari/Bulan) menggunakan connection aktif."""
+    canonical = normalize_group_name(group_name)
+    if canonical not in GROUP_NAMES:
+        return 2
+    monthly_limit = _get_monthly_limit_with_conn(conn, canonical)
+    return max(2, monthly_limit - WEEKEND_MONTHLY_SLOTS)
+
+def get_weekday_allowance_for_group(group_name):
+    """Jatah weekday per bulan mengikuti Maksimal Hari/Bulan grup.
+
+    max_hari N dengan 2 slot weekend => jatah weekday = max(2, N - 2), sehingga
+    Maksimal Hari/Bulan yang dikonfigurasi di webapps selalu bisa dicapai.
+    Grup tidak dikenal (belum terdaftar) memakai jatah lama yaitu 2.
+    """
+    with connect_db() as conn:
+        return _get_weekday_allowance_with_conn(conn, group_name)
+
+def has_other_user_assignment(tanggal, user_id):
+    """True jika tanggal sudah diambil user LAIN (aturan satu-per-tanggal)."""
+    with connect_db() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM jadwal WHERE tanggal = ? AND user_id != ? LIMIT 1",
+            (tanggal, user_id),
+        )
+        return cur.fetchone() is not None
+
+def get_date_capacity(tanggal):
+    """Kapasitas tanggal untuk tampilan web (login & /schedules).
+
+    Satu-per-tanggal (kebenaran member): slot hanya ada bila belum ada baris
+    anggota lain — sama dengan gerbang bot/web weekday. Batasan Harian TIDAK
+    dipakai: tidak ada gerbang clone yang membacanya, jadi menampilkan angkanya
+    hanya mengiklankan slot yang ditolak backend. Sabtu/Minggu juga tampil FULL
+    saat terisi (bot save menolak), sementara form weekend di UI tetap terbuka
+    lewat pengecualian JS untuk override admin tanpa batas.
+    """
+    current = get_assignment_count_for_date(tanggal)
+    return {'limit': 1, 'current': current, 'is_full': current >= 1}
+
 def _get_group_assignment_count_for_date_with_conn(conn, tanggal, group_name, exclude_user_id=None):
     """Menghitung jumlah jadwal divisi pada tanggal tertentu menggunakan connection aktif."""
     group_name = normalize_group_name(group_name)
@@ -963,7 +1006,7 @@ def add_jadwal_manual(user_id, username, telegram_username, tanggal):
         is_weekend = datetime.strptime(tanggal, '%Y-%m-%d').date().weekday() in (5, 6)
 
         if not is_weekend:
-            allowed, _, _, _ = can_add_user_to_group_quota(user_id, tanggal)
+            allowed, quota_group, _, _ = can_add_user_to_group_quota(user_id, tanggal)
             if not allowed:
                 return False
 
@@ -983,7 +1026,11 @@ def add_jadwal_manual(user_id, username, telegram_username, tanggal):
                 if tanggal not in tanggal_list:
                     tanggal_list.append(tanggal)
                 weekend_full = is_weekend_fallback_active_for_user(user_id, target_date.year, target_date.month)
-                balance_valid, _ = validate_weekday_weekend_balance(tanggal_list, weekend_full=weekend_full)
+                balance_valid, _ = validate_weekday_weekend_balance(
+                    tanggal_list,
+                    weekday_limit=_get_weekday_allowance_with_conn(conn, quota_group),
+                    weekend_full=weekend_full,
+                )
                 if not balance_valid:
                     return False
             # Weekend: insert tanpa validasi kuota/balance.
@@ -1109,10 +1156,11 @@ def validate_weekday_weekend_balance(list_of_tanggal, weekday_limit=2, weekend_f
     """Pastikan tiap user maksimal mengambil weekday sesuai kondisi bulan.
 
     Weekend divalidasi terpisah oleh validate_weekend_monthly_limits().
-    Normal: maksimal 2 weekday. Fallback: jika slot weekend sudah penuh, user boleh
-    mengambil 3 weekday agar tetap bisa memenuhi jadwal.
+    weekday_limit berasal dari get_weekday_allowance_for_group() (turunan
+    Maksimal Hari/Bulan, default 2). Fallback: jika slot weekend tersisa sudah
+    penuh, user boleh mengambil 1 weekday ekstra agar tetap bisa memenuhi jadwal.
     """
-    effective_weekday_limit = 3 if weekend_full else weekday_limit
+    effective_weekday_limit = weekday_limit + (1 if weekend_full else 0)
     monthly_counts = {}
     for tanggal in list_of_tanggal:
         tanggal_obj = datetime.strptime(tanggal, '%Y-%m-%d').date()
@@ -1126,41 +1174,16 @@ def validate_weekday_weekend_balance(list_of_tanggal, weekday_limit=2, weekend_f
             return False, f"Anda sudah memilih maksimal {effective_weekday_limit} jadwal weekday bulan ini."
     return True, None
 
-def are_weekend_slots_full_for_group(tahun, bulan, group_name):
-    """Cek apakah slot weekend yang masih bisa dipilih user sudah habis untuk group.
-
-    Fallback 3 weekday aktif jika semua tipe weekend (Sabtu dan Minggu) sudah tidak
-    punya tanggal kosong lagi untuk group pada bulan tersebut. Tidak harus semua
-    tanggal weekend penuh; cukup semua tipe weekend tidak tersedia.
-    """
-    group_name = normalize_group_name(group_name)
-    if group_name not in GROUP_NAMES:
-        return False
-
-    weekend_availability = {5: False, 6: False}
-    for day in range(1, calendar.monthrange(tahun, bulan)[1] + 1):
-        tanggal_obj = datetime(tahun, bulan, day).date()
-        weekday = tanggal_obj.weekday()
-        if weekday not in weekend_availability:
-            continue
-
-        tanggal = tanggal_obj.strftime('%Y-%m-%d')
-        limit = get_group_quota(group_name)
-        current = get_group_assignment_count_for_date(tanggal, group_name)
-        if current < limit:
-            weekend_availability[weekday] = True
-
-    return not any(weekend_availability.values())
-
 def _is_weekend_fallback_active_for_user_with_conn(conn, user_id, tahun, bulan, candidate_dates=None, excluded_rows=()):
     """Cek apakah user boleh fallback 3 weekday karena tipe weekend jatahnya habis menggunakan connection aktif.
 
     1. If candidate_dates is supplied, derive the user's already-selected weekend types from that final list;
        otherwise read the user's rows through conn.
     2. Determine remaining weekend types (5 and 6 minus selected types); if none remain, return False.
-    3. For every Saturday/Sunday in the month, read the daily limit and assignment count through conn,
-       excluding only the excluded_rows (user_id, tanggal) pairs that will disappear during the mutation.
-    4. Return True only when every date for each remaining type is at or above its limit.
+    3. For every Saturday/Sunday in the month, apply the one-per-date fill gate through conn: the date is
+       available when no OTHER user's row remains there, excluding the excluded_rows (user_id, tanggal)
+       pairs that will disappear during the mutation.
+    4. Return True only when every date for each remaining type is taken.
     """
     user_weekend_types = set()
     if candidate_dates is not None:
@@ -1187,9 +1210,20 @@ def _is_weekend_fallback_active_for_user_with_conn(conn, user_id, tahun, bulan, 
             continue
 
         tanggal = tanggal_obj.strftime('%Y-%m-%d')
-        limit = _get_daily_limit_with_conn(conn, tanggal, 1)
-        current = _get_assignment_count_for_date_with_conn(conn, tanggal, excluded_rows=excluded_rows)
-        if current < limit:
+        # Ketersediaan memakai gerbang yang sama dengan isi jadwal: satu-per-
+        # tanggal. Tanggal masih terbuka untuk user ini jika belum ada baris
+        # user LAIN (baris yang di-exclude karena akan hilang dihitung terhapus).
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT user_id, tanggal FROM jadwal WHERE tanggal = ? AND user_id != ?",
+            (tanggal, user_id)
+        )
+        excluded_set = set(excluded_rows)
+        other_rows = [
+            row for row in cur.fetchall()
+            if (row['user_id'], row['tanggal']) not in excluded_set
+        ]
+        if not other_rows:
             weekend_availability[weekday] = True
 
     return not any(weekend_availability.values())
@@ -1199,7 +1233,8 @@ def is_weekend_fallback_active_for_user(user_id, tahun, bulan):
 
     Jika user sudah punya Sabtu, maka hanya Minggu yang relevan. Jika user sudah punya
     Minggu, maka hanya Sabtu yang relevan. Fallback aktif saat semua tipe weekend yang
-    masih boleh diambil user sudah tidak punya slot kosong secara global harian.
+    masih boleh diambil user sudah tidak punya slot kosong menurut gerbang isi yang
+    sama (satu-per-tanggal: belum ada baris user lain pada tanggal tersebut).
     """
     with connect_db() as conn:
         return _is_weekend_fallback_active_for_user_with_conn(conn, user_id, tahun, bulan)
@@ -1256,7 +1291,10 @@ def _validate_month_candidate(conn, user_id, group_name, normalized_dates, tahun
     weekend_full = _is_weekend_fallback_active_for_user_with_conn(
         conn, user_id, tahun, bulan, candidate_dates=normalized_dates, excluded_rows=excluded_rows
     )
-    balance_valid, balance_msg = validate_weekday_weekend_balance(normalized_dates, weekend_full=weekend_full)
+    weekday_allowance = _get_weekday_allowance_with_conn(conn, canonical)
+    balance_valid, balance_msg = validate_weekday_weekend_balance(
+        normalized_dates, weekday_limit=weekday_allowance, weekend_full=weekend_full
+    )
     if not balance_valid:
         return MutationResult(False, 'weekday_balance', balance_msg)
 

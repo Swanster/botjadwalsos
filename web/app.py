@@ -20,10 +20,13 @@ from core.database import (
     get_jadwal_for_month, get_user_jadwal_for_month, get_jadwal_for_specific_date, add_jadwal_manual, delete_jadwal_by_id,
     get_bulan_dibuka, format_tanggal_indonesia,
     create_tables, init_default_admin,
-    set_daily_limit, get_all_daily_limits, delete_daily_limit, get_daily_limit,
-    is_date_full, add_audit_log, get_audit_logs,
+    set_daily_limit, get_all_daily_limits, delete_daily_limit,
+    get_date_capacity,
+    has_other_user_assignment,
+    add_audit_log, get_audit_logs,
     get_all_settings, set_setting, can_user_take_weekend_date,
     get_group_quota_status_for_date, can_add_user_to_group_quota,
+    get_weekday_allowance_for_group,
     is_weekend_fallback_active_for_user, validate_weekday_weekend_balance
 )
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets, get_google_sheets_client
@@ -162,14 +165,7 @@ def create_app():
             for day in week:
                 if day != 0:
                     date_str = f'{year}-{month:02d}-{day:02d}'
-                    limit = get_daily_limit(date_str, 1)
-                    current_count = len(jadwal_per_tanggal.get(date_str, []))
-                    is_full = current_count >= limit
-                    daily_limits_info[date_str] = {
-                        'limit': limit,
-                        'current': current_count,
-                        'is_full': is_full
-                    }
+                    daily_limits_info[date_str] = get_date_capacity(date_str)
 
         NAMA_BULAN = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
                       7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
@@ -364,15 +360,8 @@ def create_app():
             for day in week:
                 if day != 0:
                     date_str = f'{year}-{month:02d}-{day:02d}'
-                    limit = get_daily_limit(date_str, 1)
-                    current_count = len(jadwal_per_tanggal.get(date_str, []))
-                    is_full = current_count >= limit
                     group_quota_info[date_str] = get_group_quota_status_for_date(date_str)
-                    daily_limits_info[date_str] = {
-                        'limit': limit,
-                        'current': current_count,
-                        'is_full': is_full
-                    }
+                    daily_limits_info[date_str] = get_date_capacity(date_str)
 
         NAMA_BULAN = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
                       7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
@@ -443,10 +432,9 @@ def create_app():
                 # user berapa pun di weekend lewat web app.
                 pass
             else:
-                # Check daily limit before adding
-                if is_date_full(tanggal, 1):
-                    max_limit = get_daily_limit(tanggal, 1)
-                    flash(f'❌ Tanggal {tanggal} sudah penuh ({max_limit} orang). Tidak bisa menambah jadwal.', 'error')
+                # Aturan satu-per-tanggal (sejalan date_conflict di save):
+                if has_other_user_assignment(tanggal, user_id):
+                    flash(f'❌ Tanggal {tanggal} sudah diambil anggota lain. Tidak bisa menambah jadwal.', 'error')
                     return redirect(url_for('schedules'))
 
                 if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):
@@ -458,7 +446,11 @@ def create_app():
                 if tanggal not in current_month_dates:
                     current_month_dates.append(tanggal)
                 weekend_full = is_weekend_fallback_active_for_user(user_id, target_date.year, target_date.month)
-                balance_valid, balance_error = validate_weekday_weekend_balance(current_month_dates, weekend_full=weekend_full)
+                balance_valid, balance_error = validate_weekday_weekend_balance(
+                    current_month_dates,
+                    weekday_limit=get_weekday_allowance_for_group(get_user_group(user_id)),
+                    weekend_full=weekend_full,
+                )
                 if not balance_valid:
                     flash(f'❌ {balance_error}', 'error')
                     return redirect(url_for('schedules'))

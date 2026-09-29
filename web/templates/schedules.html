@@ -275,8 +275,13 @@ function openAssignModal(cell, dateStr) {
         memberSelect.value = '';
     }
     updateQuotaPanel(dateStr);
-    
-    if (formEl && limitInfo.is_full) {
+
+    // Weekend = override admin tanpa batas (app.py): form tetap tampil meski
+    // tanggal sudah terisi; badge FULL tetap mengikuti kebenaran member.
+    const [dY, dM, dD] = dateStr.split('-').map(Number);
+    const isWeekend = new Date(dY, dM - 1, dD).getDay() % 6 === 0;
+
+    if (formEl && limitInfo.is_full && !isWeekend) {
         formEl.style.display = 'none';
         if (!document.getElementById('fullNotice')) {
             const notice = document.createElement('div');
