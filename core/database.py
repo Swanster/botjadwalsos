@@ -10,6 +10,11 @@ import time
 
 makassar_tz = pytz.timezone("Asia/Makassar")
 
+
+def today_wita():
+    """Tanggal hari ini menurut zona Asia/Makassar (zona yang dipakai scheduler)."""
+    return datetime.now(makassar_tz).date()
+
 from config import DB_NAME
 
 LOCK_RETRY_MESSAGE = 'Jadwal belum tersimpan karena sistem sedang dipakai. Silakan coba lagi.'

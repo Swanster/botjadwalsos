@@ -19,7 +19,7 @@ from core.database import (
     delete_user_jadwal_on_dates, get_setting,
     get_weekend_monthly_limit_key,
     validate_weekday_weekend_balance, validate_weekend_monthly_limits,
-    is_weekend_fallback_active_for_user
+    is_weekend_fallback_active_for_user, today_wita
 )
 SAVE_ERROR_MESSAGES = {
     'delivery_exact_one': 'Infra Delivery harus memiliki tepat 1 jadwal pada bulan ini.',
@@ -241,20 +241,35 @@ def register_user_handlers(bot: telebot.TeleBot):
         markup.row(InlineKeyboardButton("Panduan", callback_data="menu_panduan"))
         bot.send_message(chat_id, "Silakan pilih menu:", reply_markup=markup, message_thread_id=thread_id)
 
+    def _send_month_picker(chat_id, thread_id, callback_prefix, prompt):
+        markup = InlineKeyboardMarkup()
+        for b in get_bulan_dibuka_list():
+            markup.add(InlineKeyboardButton(
+                f"{NAMA_BULAN[b['bulan']]} {b['tahun']}",
+                callback_data=f"{callback_prefix}_{b['tahun']}_{b['bulan']}",
+            ))
+        bot.send_message(chat_id, prompt, reply_markup=markup, message_thread_id=thread_id)
+
+    def pick_open_month(chat_id, thread_id, action, callback):
+        """Panggil callback(tahun, bulan); minta user memilih bila bulan terbuka > 1."""
+        bulan_terbuka_list = get_bulan_dibuka_list()
+        if not bulan_terbuka_list:
+            bot.send_message(chat_id, "Saat ini tidak ada periode jadwal yang sedang dibuka.", message_thread_id=thread_id)
+            return
+        if len(bulan_terbuka_list) == 1:
+            b = bulan_terbuka_list[0]
+            callback(b['tahun'], b['bulan'])
+            return
+        _send_month_picker(chat_id, thread_id, f"pick_{action}", "Pilih bulan jadwal:")
+
     def show_open_month_choices(chat_id, thread_id=None):
         bulan_terbuka_list = get_bulan_dibuka_list()
         if not bulan_terbuka_list:
             bot.send_message(chat_id, "Saat ini tidak ada periode jadwal yang sedang dibuka untuk diisi.", message_thread_id=thread_id)
-            return False
+            return None
         if len(bulan_terbuka_list) == 1:
             return bulan_terbuka_list[0]
-
-        markup = InlineKeyboardMarkup()
-        for bulan_terbuka in bulan_terbuka_list:
-            label = f"{NAMA_BULAN[bulan_terbuka['bulan']]} {bulan_terbuka['tahun']}"
-            callback_data = f"openmonth_{bulan_terbuka['tahun']}_{bulan_terbuka['bulan']}"
-            markup.add(InlineKeyboardButton(label, callback_data=callback_data))
-        bot.send_message(chat_id, "Pilih bulan jadwal yang ingin diisi:", reply_markup=markup, message_thread_id=thread_id)
+        _send_month_picker(chat_id, thread_id, "openmonth", "Pilih bulan jadwal yang ingin diisi:")
         return None
 
     def start_jadwal_flow(chat_id, user, thread_id=None, tahun=None, bulan=None):
@@ -288,12 +303,12 @@ def register_user_handlers(bot: telebot.TeleBot):
 
         bot.send_message(chat_id, "Silakan pilih tanggal standby Anda untuk bulan ini.", reply_markup=markup, message_thread_id=thread_id)
 
-    def send_jadwal_saya(chat_id, user, thread_id=None):
+    def send_jadwal_saya(chat_id, user, thread_id=None, tahun=None, bulan=None):
         user_id = user.id
-        bulan_aktif = get_bulan_dibuka()
-        if bulan_aktif: tahun, bulan = bulan_aktif['tahun'], bulan_aktif['bulan']
-        else:
-            today = date.today(); tahun, bulan = today.year, today.month
+        if tahun is None or bulan is None:
+            pick_open_month(chat_id, thread_id, 'jadwal_saya',
+                            lambda t, b: send_jadwal_saya(chat_id, user, thread_id, t, b))
+            return
         jadwal_user = get_user_jadwal_for_month(user_id, tahun, bulan)
         if not jadwal_user:
             bot.send_message(chat_id, f"Anda tidak memiliki jadwal standby di bulan {NAMA_BULAN[bulan]} {tahun}.", message_thread_id=thread_id)
@@ -324,29 +339,34 @@ def register_user_handlers(bot: telebot.TeleBot):
 
         bot.send_message(chat_id, "Pilih bulan untuk melihat jadwal:", reply_markup=markup, message_thread_id=thread_id)
 
-    def start_cuti_flow(chat_id, user, thread_id=None):
-        today = date.today(); user_id = user.id
-        start_of_month = f"{today.year}-{today.month:02d}-01"; end_of_month = f"{today.year}-{today.month:02d}-{calendar.monthrange(today.year, today.month)[1]}"
+    def start_cuti_flow(chat_id, user, thread_id=None, tahun=None, bulan=None):
+        user_id = user.id
+        if tahun is None or bulan is None:
+            if get_bulan_dibuka_list():
+                pick_open_month(chat_id, thread_id, 'cuti',
+                                lambda t, b: start_cuti_flow(chat_id, user, thread_id, t, b))
+                return
+            hari_ini = today_wita()
+            tahun, bulan = hari_ini.year, hari_ini.month
+        start_of_month = f"{tahun}-{bulan:02d}-01"; end_of_month = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
         absensi_tersimpan = get_user_absensi_in_range(user_id, start_of_month, end_of_month)
         
-        # --- PERBAIKAN DI SINI: Gunakan struktur sesi yang benar ---
         user_cuti_selections[user_id] = {
             'choices': set(absensi_tersimpan),
-            'tahun': today.year,
-            'bulan': today.month,
+            'tahun': tahun,
+            'bulan': bulan,
             'timestamp': time.time()
         }
         
-        markup = create_calendar('cuti', user_id, today.year, today.month)
+        markup = create_calendar('cuti', user_id, tahun, bulan)
         bot.send_message(chat_id, "Silakan pilih tanggal di mana Anda tidak tersedia.", reply_markup=markup, message_thread_id=thread_id)
 
-    def send_lihat_cuti(chat_id, thread_id=None):
-        bulan_terbuka = get_bulan_dibuka()
-        if not bulan_terbuka:
-            bot.send_message(chat_id, "Saat ini tidak ada periode jadwal yang sedang dibuka.", message_thread_id=thread_id)
+    def send_lihat_cuti(chat_id, thread_id=None, tahun=None, bulan=None):
+        if tahun is None or bulan is None:
+            pick_open_month(chat_id, thread_id, 'lihat_cuti',
+                            lambda t, b: send_lihat_cuti(chat_id, thread_id, t, b))
             return
 
-        tahun, bulan = bulan_terbuka['tahun'], bulan_terbuka['bulan']
         start_date = f"{tahun}-{bulan:02d}-01"
         end_date = f"{tahun}-{bulan:02d}-{calendar.monthrange(tahun, bulan)[1]}"
 
@@ -377,16 +397,13 @@ def register_user_handlers(bot: telebot.TeleBot):
 
         bot.send_message(chat_id, pesan, parse_mode='Markdown', message_thread_id=thread_id)
 
-    def start_batal_jadwal_flow(chat_id, user, thread_id=None):
+    def start_batal_jadwal_flow(chat_id, user, thread_id=None, tahun=None, bulan=None):
         user_id = user.id
-        bulan_terbuka = get_bulan_dibuka()
-        
-        if not bulan_terbuka:
-            bot.send_message(chat_id, "Saat ini tidak ada periode jadwal yang sedang dibuka untuk dibatalkan.", message_thread_id=thread_id)
+        if tahun is None or bulan is None:
+            pick_open_month(chat_id, thread_id, 'batal_jadwal',
+                            lambda t, b: start_batal_jadwal_flow(chat_id, user, thread_id, t, b))
             return
 
-        tahun, bulan = bulan_terbuka['tahun'], bulan_terbuka['bulan']
-    
         # Inisialisasi sesi pembatalan
         user_batal_selections[user_id] = {'choices': set(), 'tahun': tahun, 'bulan': bulan, 'timestamp': time.time()}
         
@@ -394,11 +411,16 @@ def register_user_handlers(bot: telebot.TeleBot):
         bot.send_message(chat_id, "Pilih jadwal yang ingin Anda batalkan:", reply_markup=markup, message_thread_id=thread_id)
 
 
-    def start_batal_cuti_flow(chat_id, user, thread_id=None):
+    def start_batal_cuti_flow(chat_id, user, thread_id=None, tahun=None, bulan=None):
         user_id = user.id
-        today = date.today()
-        tahun, bulan = today.year, today.month
-        
+        if tahun is None or bulan is None:
+            if get_bulan_dibuka_list():
+                pick_open_month(chat_id, thread_id, 'batal_cuti',
+                                lambda t, b: start_batal_cuti_flow(chat_id, user, thread_id, t, b))
+                return
+            hari_ini = today_wita()
+            tahun, bulan = hari_ini.year, hari_ini.month
+
         # Inisialisasi sesi pembatalan cuti
         user_batal_cuti_selections[user_id] = {'choices': set(), 'tahun': tahun, 'bulan': bulan, 'timestamp': time.time()}
 
@@ -532,6 +554,36 @@ def register_user_handlers(bot: telebot.TeleBot):
 
         tahun, bulan = int(parts[1]), int(parts[2])
         start_jadwal_flow(call.message.chat.id, call.from_user, call.message.message_thread_id, tahun, bulan)
+        bot.answer_callback_query(call.id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('pick_'))
+    def handle_pick_month(call):
+        parts = call.data.split('_')
+        if len(parts) < 4:
+            bot.answer_callback_query(call.id, "Pilihan bulan tidak valid.", show_alert=True)
+            return
+        action = '_'.join(parts[1:-2])
+        tahun, bulan = int(parts[-2]), int(parts[-1])
+        user = call.from_user
+        chat_id = call.message.chat.id
+        thread_id = call.message.message_thread_id
+        routes = {
+            'jadwal': lambda: start_jadwal_flow(chat_id, user, thread_id, tahun, bulan),
+            'jadwal_saya': lambda: send_jadwal_saya(chat_id, user, thread_id, tahun, bulan),
+            'batal_jadwal': lambda: start_batal_jadwal_flow(chat_id, user, thread_id, tahun, bulan),
+            'lihat_cuti': lambda: send_lihat_cuti(chat_id, thread_id, tahun, bulan),
+            'cuti': lambda: start_cuti_flow(chat_id, user, thread_id, tahun, bulan),
+            'batal_cuti': lambda: start_batal_cuti_flow(chat_id, user, thread_id, tahun, bulan),
+        }
+        route = routes.get(action)
+        if route is None:
+            bot.answer_callback_query(call.id, "Pilihan bulan tidak valid.", show_alert=True)
+            return
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except Exception:
+            pass
+        route()
         bot.answer_callback_query(call.id)
 
     @bot.callback_query_handler(func=lambda call: call.data.split('_')[0] in ['jadwal', 'cuti', 'view', 'batal'])
