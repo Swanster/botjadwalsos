@@ -97,6 +97,15 @@ def is_weekday_balance_locked(tanggal_str: str, pilihan_sementara, weekend_full=
 def create_reason_button(label: str, reason: str, tanggal_str: str) -> InlineKeyboardButton:
     return InlineKeyboardButton(label, callback_data=f"reason_{reason}_{tanggal_str}")
 
+def _month_seed_choices(mode, user_id, year, month):
+    """Pilihan awal untuk satu bulan: jadwal tersimpan (jadwal) atau cuti tersimpan (cuti)."""
+    if mode == 'jadwal':
+        return {row['tanggal'] for row in get_user_jadwal_for_month(user_id, year, month)}
+    start = f"{year}-{month:02d}-01"
+    end = f"{year}-{month:02d}-{calendar.monthrange(year, month)[1]}"
+    return set(get_user_absensi_in_range(user_id, start, end))
+
+
 def create_calendar(mode, user_id, year, month):
     markup = InlineKeyboardMarkup()
     # Bagian header kalender (nama bulan & nama hari)
@@ -270,6 +279,8 @@ def register_user_handlers(bot: telebot.TeleBot):
         user_jadwal_lama = {row['tanggal'] for row in jadwal_bulan_ini if row['user_id'] == user_id}
         user_selections[user_id] = {
             'choices': user_jadwal_lama,
+            'tahun': tahun,
+            'bulan': bulan,
             'timestamp': time.time()
         }
         
@@ -321,6 +332,8 @@ def register_user_handlers(bot: telebot.TeleBot):
         # --- PERBAIKAN DI SINI: Gunakan struktur sesi yang benar ---
         user_cuti_selections[user_id] = {
             'choices': set(absensi_tersimpan),
+            'tahun': today.year,
+            'bulan': today.month,
             'timestamp': time.time()
         }
         
@@ -375,7 +388,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         tahun, bulan = bulan_terbuka['tahun'], bulan_terbuka['bulan']
     
         # Inisialisasi sesi pembatalan
-        user_batal_selections[user_id] = {'choices': set(), 'timestamp': time.time()}
+        user_batal_selections[user_id] = {'choices': set(), 'tahun': tahun, 'bulan': bulan, 'timestamp': time.time()}
         
         markup = create_calendar('batal_jadwal', user_id, tahun, bulan)
         bot.send_message(chat_id, "Pilih jadwal yang ingin Anda batalkan:", reply_markup=markup, message_thread_id=thread_id)
@@ -387,7 +400,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         tahun, bulan = today.year, today.month
         
         # Inisialisasi sesi pembatalan cuti
-        user_batal_cuti_selections[user_id] = {'choices': set(), 'timestamp': time.time()}
+        user_batal_cuti_selections[user_id] = {'choices': set(), 'tahun': tahun, 'bulan': bulan, 'timestamp': time.time()}
 
         markup = create_calendar('batal_cuti', user_id, tahun, bulan)
         bot.send_message(chat_id, "Pilih tanggal cuti yang ingin Anda batalkan:", reply_markup=markup, message_thread_id=thread_id)
@@ -648,6 +661,10 @@ def register_user_handlers(bot: telebot.TeleBot):
 
             elif action == 'nav':
                 year, month = int(parts[2]), int(parts[3])
+                sesi = selection_dict[user_id]
+                if (sesi.get('tahun'), sesi.get('bulan')) != (year, month):
+                    sesi['tahun'], sesi['bulan'] = year, month
+                    sesi['choices'] = _month_seed_choices(mode, user_id, year, month)
                 markup = create_calendar(mode, user_id, year, month)
                 bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=markup)
 
@@ -708,6 +725,10 @@ def register_user_handlers(bot: telebot.TeleBot):
             
             elif action == 'nav':
                 year, month = int(parts[3]), int(parts[4])
+                sesi = selection_dict[user_id]
+                if (sesi.get('tahun'), sesi.get('bulan')) != (year, month):
+                    sesi['tahun'], sesi['bulan'] = year, month
+                    sesi['choices'] = set()
                 markup = create_calendar(f"batal_{sub_mode}", user_id, year, month)
                 bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=markup)
 

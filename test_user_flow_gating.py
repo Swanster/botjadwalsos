@@ -83,3 +83,25 @@ def test_closed_period_offers_no_calendar(tmp_path, monkeypatch):
 
     assert bot.sent[-1]["markup"] is None
     assert not db.get_user_jadwal_for_month(500, 2026, 11)
+
+
+def test_nav_to_other_month_does_not_mix_selections(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    db.buka_bulan_baru(2026, 11)
+    db.buka_bulan_baru(2026, 12)
+    bot = _register()
+
+    bot.handlers["start"](message(500, "/start"))
+    picker = button_data(bot.sent[-1]["markup"])
+    pick_nov = [data for _, data in picker if data and data.endswith("_2026_11")][0]
+    bot.fire(pick_nov, 500)
+
+    november = _calendar_dates(bot.sent[-1]["markup"], "jadwal_toggle_2026-11-")
+    bot.fire(november[9], 500)                    # 10 Nov
+    bot.fire("jadwal_nav_2026_12", 500)
+    december = _calendar_dates(bot.edits[-1], "jadwal_toggle_2026-12-")
+    bot.fire(december[0], 500)                    # 1 Des
+    bot.fire("jadwal_save_2026_12", 500)
+
+    assert [row["tanggal"] for row in db.get_user_jadwal_for_month(500, 2026, 12)] == ["2026-12-01"]
+    assert not any("di luar bulan target" in (text or "") for text in bot.answers)
