@@ -488,7 +488,7 @@ def test_mutations_use_single_connection_and_pass_conn_to_private_helpers():
         '_get_group_quota_with_conn',
         '_get_group_assignment_count_for_date_with_conn',
         '_is_weekend_fallback_active_for_user_with_conn',
-        '_find_bot_date_conflicts_with_conn',
+        '_find_date_capacity_conflicts_with_conn',
     ]
 
     def make_wrapper(orig_fn):

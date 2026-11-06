@@ -340,7 +340,7 @@ def update_user_jadwal_for_month(user_id, first_name, telegram_username, list_of
                 f'Jumlah jadwal ({len(normalized_dates)}) melebihi batas bulanan divisi Anda ({monthly_limit}).',
             )
 
-        if _find_bot_date_conflicts_with_conn(conn, user_id, normalized_dates):
+        if _find_date_capacity_conflicts_with_conn(conn, user_id, normalized_dates):
             return MutationResult(False, 'date_conflict')
 
         cur = conn.cursor()
@@ -803,28 +803,23 @@ def get_weekday_allowance_for_group(group_name):
     with connect_db() as conn:
         return _get_weekday_allowance_with_conn(conn, group_name)
 
-def has_other_user_assignment(tanggal, user_id):
-    """True jika tanggal sudah diambil user LAIN (aturan satu-per-tanggal)."""
+def date_is_taken(tanggal, user_id):
+    """True bila slot tanggal ini sudah penuh untuk user (kapasitas = Batasan Harian)."""
     with connect_db() as conn:
         cur = conn.cursor()
         cur.execute(
-            "SELECT 1 FROM jadwal WHERE tanggal = ? AND user_id != ? LIMIT 1",
+            "SELECT COUNT(*) AS n FROM jadwal WHERE tanggal = ? AND user_id != ?",
             (tanggal, user_id),
         )
-        return cur.fetchone() is not None
+        others = cur.fetchone()['n']
+        return others >= _get_daily_limit_with_conn(conn, tanggal)
+
 
 def get_date_capacity(tanggal):
-    """Kapasitas tanggal untuk tampilan web (login & /schedules).
-
-    Satu-per-tanggal (kebenaran member): slot hanya ada bila belum ada baris
-    anggota lain — sama dengan gerbang bot/web weekday. Batasan Harian TIDAK
-    dipakai: tidak ada gerbang clone yang membacanya, jadi menampilkan angkanya
-    hanya mengiklankan slot yang ditolak backend. Sabtu/Minggu juga tampil FULL
-    saat terisi (bot save menolak), sementara form weekend di UI tetap terbuka
-    lewat pengecualian JS untuk override admin tanpa batas.
-    """
+    """Kapasitas tanggal untuk tampilan web/kalender: kapasitas = Batasan Harian (default 1)."""
+    limit = get_daily_limit(tanggal)
     current = get_assignment_count_for_date(tanggal)
-    return {'limit': 1, 'current': current, 'is_full': current >= 1}
+    return {'limit': limit, 'current': current, 'is_full': current >= limit}
 
 def _get_group_assignment_count_for_date_with_conn(conn, tanggal, group_name, exclude_user_id=None):
     """Menghitung jumlah jadwal divisi pada tanggal tertentu menggunakan connection aktif."""
@@ -1266,16 +1261,18 @@ def _normalize_month_dates(list_of_tanggal, tahun, bulan):
     normalized.sort()
     return normalized
 
-def _find_bot_date_conflicts_with_conn(conn, user_id, dates):
-    """Selects every jadwal row on the selected dates where user_id != ?."""
+def _find_date_capacity_conflicts_with_conn(conn, user_id, dates):
+    """Daftar tanggal yang slotnya sudah penuh oleh anggota lain (kapasitas Batasan Harian)."""
     if not dates:
         return []
-    cur = conn.cursor()
     placeholders = ', '.join('?' for _ in dates)
-    query = f"SELECT id, user_id, username, telegram_username, tanggal FROM jadwal WHERE tanggal IN ({placeholders}) AND user_id != ?"
-    params = list(dates) + [user_id]
-    cur.execute(query, params)
-    return [dict(row) for row in cur.fetchall()]
+    cur = conn.cursor()
+    cur.execute(
+        f"SELECT tanggal, COUNT(*) AS n FROM jadwal WHERE tanggal IN ({placeholders}) AND user_id != ? GROUP BY tanggal",
+        list(dates) + [user_id],
+    )
+    others = {row['tanggal']: row['n'] for row in cur.fetchall()}
+    return [tanggal for tanggal in dates if others.get(tanggal, 0) >= _get_daily_limit_with_conn(conn, tanggal)]
 
 def _validate_month_candidate(conn, user_id, group_name, normalized_dates, tahun, bulan, excluded_rows=()):
     """Checks Delivery exact-one, other monthly limits, weekend monthly limits,

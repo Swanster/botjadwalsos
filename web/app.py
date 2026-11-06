@@ -22,7 +22,7 @@ from core.database import (
     create_tables, init_default_admin,
     set_daily_limit, get_all_daily_limits, delete_daily_limit,
     get_date_capacity,
-    has_other_user_assignment,
+    date_is_taken,
     add_audit_log, get_audit_logs,
     get_all_settings, set_setting, can_user_take_weekend_date,
     get_group_quota_status_for_date, can_add_user_to_group_quota,
@@ -433,8 +433,8 @@ def create_app():
                 pass
             else:
                 # Aturan satu-per-tanggal (sejalan date_conflict di save):
-                if has_other_user_assignment(tanggal, user_id):
-                    flash(f'❌ Tanggal {tanggal} sudah diambil anggota lain. Tidak bisa menambah jadwal.', 'error')
+                if date_is_taken(tanggal, user_id):
+                    flash(f'❌ Tanggal {tanggal} sudah penuh (Batasan Harian tercapai). Tidak bisa menambah jadwal.', 'error')
                     return redirect(url_for('schedules'))
 
                 if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):

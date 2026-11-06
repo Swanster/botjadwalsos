@@ -97,12 +97,12 @@ def test_date_capacity_matches_one_per_date_gate(tmp_path, monkeypatch):
         'tanggal yang sudah diambil anggota lain harus ditandai penuh'
     )
 
-    # Batasan Harian TIDAK mengubah kapasitas tree ini (tidak ada gerbang yang
-    # membacanya) — jangan mengiklankan slot yang mustahil disimpan.
+    # Batasan Harian kini menjadi kapasitas nyata per tanggal (keputusan
+    # 2026-11-07): tanggal dengan batas 3 orang menampilkan kapasitas 3.
     db.set_daily_limit('2026-11-06', 3)
     cap = db.get_date_capacity('2026-11-06')
-    assert cap == {'limit': 1, 'current': 0, 'is_full': False}, (
-        'Batasan Harian tidak boleh membuat kapasitas mengiklankan slot fiktif'
+    assert cap == {'limit': 3, 'current': 0, 'is_full': False}, (
+        'Batasan Harian harus dipakai sebagai kapasitas tanggal'
     )
 
     # Sabtu terisi juga FULL (bot save satu-per-tanggal); pengecualian form
@@ -242,7 +242,7 @@ def test_web_add_enforces_one_user_per_date_with_clear_message(tmp_path, monkeyp
     rows202 = [x for x in db.get_user_jadwal_for_month(202, 2026, 11) if x['tanggal'] == tanggal]
     assert not rows202, 'anggota ke-2 pada tanggal yang sudah diambil lain harus ditolak'
     html = r2.get_data(as_text=True)
-    assert 'sudah diambil anggota lain' in html, (
+    assert 'sudah penuh (Batasan Harian tercapai)' in html, (
         'penolakan tanggal terisi harus menampilkan pesan jelas, bukan gagal generik'
     )
 

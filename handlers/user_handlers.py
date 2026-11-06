@@ -24,7 +24,7 @@ from core.database import (
 SAVE_ERROR_MESSAGES = {
     'delivery_exact_one': 'Infra Delivery harus memiliki tepat 1 jadwal pada bulan ini.',
     'monthly_limit': 'Jumlah jadwal melebihi batas bulanan divisi Anda.',
-    'date_conflict': 'Salah satu tanggal sudah diambil anggota lain.',
+    'date_conflict': 'Tanggal yang dipilih sudah penuh (Batasan Harian tercapai). Silakan pilih tanggal lain.',
     'weekend_limit': 'Batas jadwal Sabtu/Minggu per bulan terlampaui.',
     'weekday_balance': 'Batas keseimbangan weekday/weekend terlampaui.',
     'database_locked': db.LOCK_RETRY_MESSAGE,
@@ -184,7 +184,7 @@ def create_calendar(mode, user_id, year, month):
 
                     # Gerbang tampilan sejalan backend: satu-per-tanggal dan
                     # jatah weekday turunan Maksimal Hari/Bulan grup.
-                    is_penuh = db.has_other_user_assignment(current_date_str, user_id)
+                    is_penuh = db.date_is_taken(current_date_str, user_id)
                     is_weekend_terkunci = is_weekend_monthly_locked(current_date_str, pilihan_sementara)
                     is_weekday_balance_terkunci = is_weekday_balance_locked(
                         current_date_str, pilihan_sementara,
@@ -529,7 +529,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         if reason == 'absen':
             message_text = "Tanggal ini terkunci karena Anda menandai cuti/tidak tersedia."
         elif reason == 'full':
-            message_text = "Tanggal ini sudah diambil anggota lain."
+            message_text = "Tanggal ini sudah penuh (Batasan Harian tercapai)."
         elif reason == 'weekend':
             message_text = get_weekend_limit_message(tanggal_str)
         elif reason == 'weekdaybalance':
@@ -685,9 +685,9 @@ def register_user_handlers(bot: telebot.TeleBot):
                         return
 
                     # Aturan satu-per-tanggal (sejalan date_conflict di save):
-                    # tolak tanggal yang sudah diambil anggota lain.
-                    if db.has_other_user_assignment(date_str, user_id):
-                        bot.answer_callback_query(call.id, "❌ Tanggal ini sudah diambil anggota lain.", show_alert=True)
+                    # Kapasitas tanggal (Batasan Harian): tolak bila slot sudah penuh.
+                    if db.date_is_taken(date_str, user_id):
+                        bot.answer_callback_query(call.id, "❌ Tanggal ini sudah penuh. Silakan pilih tanggal lain.", show_alert=True)
                         return
 
                     max_hari_keys = {
