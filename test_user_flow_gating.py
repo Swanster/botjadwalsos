@@ -105,3 +105,69 @@ def test_nav_to_other_month_does_not_mix_selections(tmp_path, monkeypatch):
 
     assert [row["tanggal"] for row in db.get_user_jadwal_for_month(500, 2026, 12)] == ["2026-12-01"]
     assert not any("di luar bulan target" in (text or "") for text in bot.answers)
+
+
+# ---------------------------------------------------------------------------
+# Perintah non-/start memakai bulan yang dipilih
+# ---------------------------------------------------------------------------
+
+
+def test_jadwal_saya_uses_chosen_open_month(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    db.buka_bulan_baru(2026, 11)
+    db.buka_bulan_baru(2026, 12)
+    assert db.add_jadwal_manual(500, "Apps User", "apps_user", "2026-12-05")
+    bot = _register()
+
+    bot.handlers["jadwal_saya"](message(500, "/jadwal_saya"))
+    pick = [data for _, data in button_data(bot.sent[-1]["markup"]) if data and data.startswith("pick_jadwal_saya_2026_12")]
+    assert pick, "harus ada tombol Desember 2026"
+    bot.fire(pick[0], 500)
+
+    assert any("5 Desember 2026" in sent["text"] for sent in bot.sent)
+
+
+def test_batal_jadwal_uses_chosen_open_month(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    db.buka_bulan_baru(2026, 11)
+    db.buka_bulan_baru(2026, 12)
+    assert db.add_jadwal_manual(500, "Apps User", "apps_user", "2026-12-05")
+    bot = _register()
+
+    bot.handlers["batal_jadwal"](message(500, "/batal_jadwal"))
+    pick = [data for _, data in button_data(bot.sent[-1]["markup"]) if data and data.startswith("pick_batal_jadwal_2026_12")]
+    bot.fire(pick[0], 500)
+
+    cancel_dates = _calendar_dates(bot.sent[-1]["markup"], "batal_jadwal_toggle_2026-12-")
+    assert cancel_dates == ["batal_jadwal_toggle_2026-12-05"]
+    bot.fire(cancel_dates[0], 500)
+    bot.fire("batal_jadwal_save_2026_12", 500)
+    assert db.get_user_jadwal_for_month(500, 2026, 12) == []
+
+
+def test_cuti_opens_active_period_month_not_today(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    db.buka_bulan_baru(2026, 12)
+    from datetime import date
+    monkeypatch.setattr(user_handlers, "today_wita", lambda: date(2026, 11, 7))
+    bot = _register()
+
+    bot.handlers["cuti"](message(500, "/cuti"))
+
+    dates = _calendar_dates(bot.sent[-1]["markup"], "cuti_toggle_2026-12-")
+    assert dates, "kalender cuti harus membuka Desember 2026 (periode aktif)"
+
+
+def test_lihat_cuti_uses_chosen_open_month(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    db.buka_bulan_baru(2026, 11)
+    db.buka_bulan_baru(2026, 12)
+    db.set_user_absensi(500, ["2026-12-20"], 2026, 12)
+    bot = _register()
+
+    bot.handlers["lihat_cuti"](message(500, "/lihat_cuti"))
+    pick = [data for _, data in button_data(bot.sent[-1]["markup"]) if data and data.startswith("pick_lihat_cuti_2026_12")]
+    assert pick, "harus ada tombol Desember 2026"
+    bot.fire(pick[0], 500)
+
+    assert any("20 Desember 2026" in sent["text"] for sent in bot.sent)
