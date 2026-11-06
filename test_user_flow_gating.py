@@ -171,3 +171,23 @@ def test_lihat_cuti_uses_chosen_open_month(tmp_path, monkeypatch):
     bot.fire(pick[0], 500)
 
     assert any("20 Desember 2026" in sent["text"] for sent in bot.sent)
+
+
+def test_tukar_jadwal_uses_chosen_open_month(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    db.buka_bulan_baru(2026, 11)
+    db.buka_bulan_baru(2026, 12)
+    assert db.add_jadwal_manual(500, "Apps User", "apps_user", "2026-12-05")
+    bot = FakeBot()
+    user_handlers.register_user_handlers(bot)
+    from handlers import swap_handler
+    swap_handler.register_swap_handlers(bot)
+    swap_handler.swap_data.clear()
+
+    bot.handlers["tukar_jadwal"](message(500, "/tukar_jadwal"))
+    pick = [data for _, data in button_data(bot.sent[-1]["markup"]) if data and data.startswith("pick_tukar_2026_12")]
+    assert pick, "harus ada tombol Desember 2026"
+    bot.fire(pick[0], 500)
+
+    swap_dates = _calendar_dates(bot.sent[-1]["markup"], "swap_selectA_2026-12-")
+    assert swap_dates == ["swap_selectA_2026-12-05"]

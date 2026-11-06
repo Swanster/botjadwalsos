@@ -556,7 +556,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         start_jadwal_flow(call.message.chat.id, call.from_user, call.message.message_thread_id, tahun, bulan)
         bot.answer_callback_query(call.id)
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('pick_'))
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('pick_') and not call.data.startswith('pick_tukar_'))
     def handle_pick_month(call):
         parts = call.data.split('_')
         if len(parts) < 4:

@@ -6,10 +6,15 @@ from datetime import datetime
 
 from config import GROUP_CHAT_ID, ALLOWED_TOPIC_ID
 from core.database import (
-    get_bulan_dibuka, get_user_jadwal_for_month, get_user_by_telegram_username,
+    get_bulan_dibuka_list, get_user_jadwal_for_month, get_user_by_telegram_username,
     create_tukar_request, get_tukar_request_by_id, execute_swap,
     update_tukar_request_status, format_tanggal_indonesia, validate_swap_date_type
 )
+
+NAMA_BULAN = {
+    1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
+    7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'
+}
 
 swap_data = {}
 
@@ -46,10 +51,10 @@ def register_swap_handlers(bot: telebot.TeleBot):
         swap_data[user_id]['user_b_name'] = user_b_name
         swap_data[user_id]['user_b_username'] = user_b_username
 
-        bulan_aktif = get_bulan_dibuka()
-        jadwal_user_b = get_user_jadwal_for_month(user_b_id, bulan_aktif['tahun'], bulan_aktif['bulan'])
+        sesi = swap_data[user_id]
+        jadwal_user_b = get_user_jadwal_for_month(user_b_id, sesi['tahun'], sesi['bulan'])
         if not jadwal_user_b:
-            bot.reply_to(message, f"@{user_b_username} tidak memiliki jadwal di bulan ini untuk ditukar.", message_thread_id=thread_id)
+            bot.reply_to(message, f"@{user_b_username} tidak memiliki jadwal di bulan itu untuk ditukar.", message_thread_id=thread_id)
             if user_id in swap_data: del swap_data[user_id]
             return
 
@@ -62,18 +67,14 @@ def register_swap_handlers(bot: telebot.TeleBot):
         
         bot.send_message(message.chat.id, f"Silakan pilih tanggal dari jadwal @{user_b_username} yang ingin Anda ambil:", reply_markup=markup, message_thread_id=thread_id)
 
-    @bot.message_handler(commands=['tukar_jadwal'])
-    def handle_tukar_jadwal(message):
-        # ... (fungsi ini tidak berubah dari versi forward) ...
-        user_id = message.from_user.id
-        thread_id = message.message_thread_id
-        bulan_aktif = get_bulan_dibuka()
-        if not bulan_aktif:
-            bot.reply_to(message, "Tidak ada jadwal yang aktif untuk ditukar.", message_thread_id=thread_id)
-            return
-        jadwal_user = get_user_jadwal_for_month(user_id, bulan_aktif['tahun'], bulan_aktif['bulan'])
+    def start_tukar_flow(chat_id, user_id, thread_id, tahun, bulan):
+        jadwal_user = get_user_jadwal_for_month(user_id, tahun, bulan)
         if not jadwal_user:
-            bot.reply_to(message, "Anda tidak memiliki jadwal standby di bulan ini untuk ditukar.", message_thread_id=thread_id)
+            bot.send_message(
+                chat_id,
+                f"Anda tidak memiliki jadwal standby di {NAMA_BULAN[bulan]} {tahun} untuk ditukar.",
+                message_thread_id=thread_id,
+            )
             return
         markup = InlineKeyboardMarkup()
         for jadwal in jadwal_user:
@@ -81,7 +82,34 @@ def register_swap_handlers(bot: telebot.TeleBot):
             label = format_tanggal_indonesia(tgl_obj)
             callback_data = f"swap_selectA_{jadwal['tanggal']}"
             markup.add(InlineKeyboardButton(label, callback_data=callback_data))
-        bot.reply_to(message, "Silakan pilih tanggal JADWAL ANDA yang ingin ditukar:", reply_markup=markup, message_thread_id=thread_id)
+        bot.send_message(chat_id, "Silakan pilih tanggal JADWAL ANDA yang ingin ditukar:", reply_markup=markup, message_thread_id=thread_id)
+
+    @bot.message_handler(commands=['tukar_jadwal'])
+    def handle_tukar_jadwal(message):
+        user_id = message.from_user.id
+        thread_id = message.message_thread_id
+        bulan_terbuka_list = get_bulan_dibuka_list()
+        if not bulan_terbuka_list:
+            bot.reply_to(message, "Tidak ada jadwal yang aktif untuk ditukar.", message_thread_id=thread_id)
+            return
+        if len(bulan_terbuka_list) == 1:
+            b = bulan_terbuka_list[0]
+            start_tukar_flow(message.chat.id, user_id, thread_id, b['tahun'], b['bulan'])
+            return
+        markup = InlineKeyboardMarkup()
+        for b in bulan_terbuka_list:
+            markup.add(InlineKeyboardButton(
+                f"{NAMA_BULAN[b['bulan']]} {b['tahun']}",
+                callback_data=f"pick_tukar_{b['tahun']}_{b['bulan']}",
+            ))
+        bot.send_message(message.chat.id, "Pilih bulan jadwal yang ingin ditukar:", reply_markup=markup, message_thread_id=thread_id)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('pick_tukar_'))
+    def handle_pick_tukar(call):
+        parts = call.data.split('_')
+        tahun, bulan = int(parts[-2]), int(parts[-1])
+        start_tukar_flow(call.message.chat.id, call.from_user.id, call.message.message_thread_id, tahun, bulan)
+        bot.answer_callback_query(call.id)
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('swap_'))
     def handle_swap_callbacks(call):
@@ -89,7 +117,8 @@ def register_swap_handlers(bot: telebot.TeleBot):
         parts = call.data.split('_'); action = parts[1]; user_id = call.from_user.id; thread_id = call.message.message_thread_id
         if action == 'selectA':
             tanggal_a = parts[2]
-            swap_data[user_id] = {'tanggal_a': tanggal_a}
+            tgl_obj = datetime.strptime(tanggal_a, '%Y-%m-%d').date()
+            swap_data[user_id] = {'tanggal_a': tanggal_a, 'tahun': tgl_obj.year, 'bulan': tgl_obj.month}
             msg = bot.send_message(call.message.chat.id, "Baik. Sekarang, balas pesan ini dengan me-mention satu orang (contoh: @username).", reply_markup=telebot.types.ForceReply(selective=True), message_thread_id=thread_id)
             bot.register_next_step_handler(msg, process_mention_step)
             bot.answer_callback_query(call.id)
