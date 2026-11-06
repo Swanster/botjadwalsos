@@ -66,6 +66,11 @@ def get_weekend_limit_message(tanggal_str: str) -> str:
     nama_hari = HARI_MAP_ID[weekend_key[2]]
     return f"❌ Hanya bisa pilih 1 {nama_hari} setiap bulan."
 
+def is_month_open(tahun, bulan):
+    """True bila (tahun, bulan) ada di daftar periode yang dibuka admin."""
+    return any(b['tahun'] == tahun and b['bulan'] == bulan for b in get_bulan_dibuka_list())
+
+
 def is_weekend_monthly_locked(tanggal_str: str, pilihan_sementara) -> bool:
     weekend_key = get_weekend_monthly_limit_key(tanggal_str)
     if not weekend_key or tanggal_str in pilihan_sementara:
@@ -648,6 +653,15 @@ def register_user_handlers(bot: telebot.TeleBot):
 
             elif action == 'save':
                 year, month = int(parts[2]), int(parts[3])
+                if not is_month_open(year, month):
+                    bot.answer_callback_query(
+                        call.id,
+                        f"Periode jadwal {NAMA_BULAN[month]} {year} sedang tidak dibuka. Hubungi admin.",
+                        show_alert=True,
+                    )
+                    if user_id in selection_dict:
+                        del selection_dict[user_id]
+                    return
                 pilihan_final = list(selection_dict.get(user_id, {}).get('choices', []))
                 if mode == 'jadwal':
                     result = update_user_jadwal_for_month(user_id, call.from_user.first_name, call.from_user.username, pilihan_final, year, month)
@@ -699,6 +713,15 @@ def register_user_handlers(bot: telebot.TeleBot):
 
             elif action == 'save':
                 year, month = int(parts[3]), int(parts[4])
+                if not is_month_open(year, month):
+                    bot.answer_callback_query(
+                        call.id,
+                        f"Periode jadwal {NAMA_BULAN[month]} {year} sedang tidak dibuka.",
+                        show_alert=True,
+                    )
+                    if user_id in selection_dict:
+                        del selection_dict[user_id]
+                    return
                 pilihan_batal = list(selection_dict.get(user_id, {}).get('choices', []))
                 
                 if not pilihan_batal:
