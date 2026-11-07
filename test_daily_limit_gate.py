@@ -69,3 +69,22 @@ def test_monthly_report_full_days_follow_date_capacity(tmp_path, monkeypatch):
     assert set(report["full_dates"]) == {"2026-11-01", "2026-11-02", "2026-11-03"}
     assert report["under_capacity_dates_count"] == 27
     assert all(item["tanggal"] for item in report["under_quota"])
+
+
+def test_today_wita_uses_makassar_date(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    from datetime import datetime
+    import pytz
+
+    assert db.today_wita() == datetime.now(pytz.timezone("Asia/Makassar")).date()
+
+
+def test_monthly_report_keeps_group_labels(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    from core.monthly_report import build_monthly_report
+
+    report = build_monthly_report(2026, 11)
+
+    labels = {group["group_name"]: group["group_label"] for group in report["per_group"]}
+    assert labels["INFRA_DELIVERY"] == "Infra Delivery"
+    assert labels["INFRA_OPERATION"] == "Infra Operation"

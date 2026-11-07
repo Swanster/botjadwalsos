@@ -27,7 +27,7 @@ from core.database import (
     get_all_settings, set_setting, can_user_take_weekend_date,
     get_group_quota_status_for_date, can_add_user_to_group_quota,
     get_weekday_allowance_for_group,
-    is_weekend_fallback_active_for_user, validate_weekday_weekend_balance
+    is_weekend_fallback_active_for_user, validate_weekday_weekend_balance, today_wita
 )
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets, get_google_sheets_client
 from core.monthly_report import build_monthly_report
@@ -129,7 +129,7 @@ def create_app():
 
         # Get calendar data for current month (like schedules page)
         from datetime import date
-        today = date.today()
+        today = today_wita()
         year = request.args.get('year', today.year, type=int)
         month = request.args.get('month', today.month, type=int)
 
@@ -228,7 +228,7 @@ def create_app():
     @app.route('/monthly-report')
     @login_required
     def monthly_report():
-        today = date.today()
+        today = today_wita()
         year = request.args.get('year', today.year, type=int)
         month = request.args.get('month', today.month, type=int)
 
@@ -316,7 +316,7 @@ def create_app():
     @app.route('/schedules')
     @login_required
     def schedules():
-        today = date.today()
+        today = today_wita()
         year = request.args.get('year', today.year, type=int)
         month = request.args.get('month', today.month, type=int)
 

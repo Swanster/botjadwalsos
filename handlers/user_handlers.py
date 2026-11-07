@@ -321,7 +321,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         bot.send_message(chat_id, pesan, parse_mode='Markdown', message_thread_id=thread_id)
 
     def send_lihat_jadwal(chat_id, thread_id=None):
-        today = date.today()
+        today = today_wita()
         markup = InlineKeyboardMarkup()
 
         # Always show current month

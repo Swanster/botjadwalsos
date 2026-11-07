@@ -13,7 +13,7 @@ from core.database import (
     get_bulan_dibuka, get_bulan_dibuka_list, buka_bulan_baru, format_tanggal_indonesia, 
     get_jadwal_for_month, tutup_bulan_aktif, get_user_group, 
     get_user_by_telegram_username, set_user_group, get_all_months_status,
-    get_all_registered_users
+    get_all_registered_users, today_wita
 )
 from core.google_sheets import get_google_sheets_client
 
@@ -73,7 +73,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 bulan = int(parts[1]); tahun = int(parts[2])
                 if not (1 <= bulan <= 12 and tahun > 2020): raise ValueError("Bulan atau tahun tidak valid.")
             elif len(parts) == 1:
-                hari_ini = date.today(); bulan = hari_ini.month; tahun = hari_ini.year
+                hari_ini = today_wita(); bulan = hari_ini.month; tahun = hari_ini.year
             else: raise ValueError("Format perintah salah.")
         except (ValueError, IndexError):
             bot.reply_to(message, "Format perintah salah.\nGunakan: `/buka_jadwal_bulan` (untuk bulan ini) atau `/buka_jadwal_bulan <bulan> <tahun>`")
@@ -152,7 +152,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         months = get_all_months_status()
         
         # Selalu sertakan bulan sekarang jika belum ada
-        today = date.today()
+        today = today_wita()
         if not any(m['tahun'] == today.year and m['bulan'] == today.month for m in months):
             months.insert(0, {'tahun': today.year, 'bulan': today.month, 'status': 'CURRENT'})
         months = months[:2]
@@ -316,7 +316,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
 
         try:
             # Sync semua jadwal (bulan ini)
-            today = date.today()
+            today = today_wita()
             jadwal_data = get_jadwal_for_month(today.year, today.month)
 
             count_jadwal = 0
