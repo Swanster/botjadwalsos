@@ -50,13 +50,13 @@ class FakeBot:
     def answer_callback_query(self, callback_id, text=None, show_alert=False):
         self.answers.append(text)
 
-    def fire(self, data, user_id, chat_id=-100, message_id=1):
+    def fire(self, data, user_id, chat_id=-100, message_id=1, chat_type="supergroup"):
         call = SimpleNamespace(
             data=data,
             id="cb",
             from_user=SimpleNamespace(id=user_id, first_name="U", username="u"),
             message=SimpleNamespace(
-                chat=SimpleNamespace(id=chat_id, type="supergroup"),
+                chat=SimpleNamespace(id=chat_id, type=chat_type),
                 message_thread_id=None,
                 message_id=message_id,
                 reply_markup=None,

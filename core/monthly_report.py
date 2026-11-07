@@ -11,6 +11,7 @@ from core.database import (
     get_jadwal_for_month,
     get_weekend_monthly_limit_key,
 )
+from core.telegram_text import escape_markdown
 NAMA_BULAN = {
     1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
     7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'
@@ -164,7 +165,7 @@ def format_monthly_report_for_telegram(report):
     lines.extend(["", "👤 *Per Orang*"])
     for user in report['per_user'][:20]:
         label = user.get('group_label') or user['group_name']
-        lines.append(f"- {user['name']} ({label}): *{user['count']}*")
+        lines.append(f"- {escape_markdown(user['name'])} ({label}): *{user['count']}*")
     if len(report['per_user']) > 20:
         lines.append(f"- ...dan {len(report['per_user']) - 20} member lainnya.")
 
@@ -172,7 +173,7 @@ def format_monthly_report_for_telegram(report):
     if report['zero_users']:
         for user in report['zero_users'][:15]:
             label = user.get('group_label') or user['group_name']
-            lines.append(f"- {user['name']} ({label})")
+            lines.append(f"- {escape_markdown(user['name'])} ({label})")
         if len(report['zero_users']) > 15:
             lines.append(f"- ...dan {len(report['zero_users']) - 15} member lainnya.")
     else:

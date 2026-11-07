@@ -7,8 +7,9 @@ from datetime import datetime, date
 from functools import wraps
 import calendar
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from urllib.parse import urlparse
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -41,6 +42,19 @@ from config import SECRET_KEY, WEB_HOST, WEB_PORT
 LOGIN_ATTEMPTS = {}          # ip -> (count, first_attempt_ts)
 LOGIN_WINDOW_SECONDS = 300
 LOGIN_MAX_ATTEMPTS = 5
+
+NAMA_BULAN = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
+              7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
+
+
+def build_public_month(year, month):
+    """Data kalender publik: hanya nama + divisi per tanggal (tanpa data sensitif)."""
+    per_tanggal = {}
+    for row in get_jadwal_for_month(year, month):
+        per_tanggal.setdefault(row['tanggal'], []).append(row)
+    calendar_rows = calendar.Calendar(firstweekday=calendar.MONDAY).monthdayscalendar(year, month)
+    days_in_month = calendar.monthrange(year, month)[1]
+    return per_tanggal, calendar_rows, days_in_month
 
 
 def _load_secret_key():
@@ -80,6 +94,30 @@ def _register_login_failure(ip):
 def create_app():
     app = Flask(__name__)
     app.secret_key = _load_secret_key()
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE='Lax',
+        # Set WEB_COOKIE_SECURE=true hanya kalau dashboard disajikan lewat HTTPS.
+        SESSION_COOKIE_SECURE=os.environ.get('WEB_COOKIE_SECURE', 'false').lower() == 'true',
+    )
+
+    @app.before_request
+    def reject_cross_origin_writes():
+        """Proteksi CSRF: POST/PUT/PATCH/DELETE harus dari origin yang sama.
+
+        Browser mengirim header Origin pada permintaan lintas situs. Bila header tidak
+        ada (curl/script internal), permintaan diteruskan — cookie SameSite=Lax tetap
+        menahan POST lintas situs dari browser.
+        """
+        if request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return None
+        origin = request.headers.get('Origin') or request.headers.get('Referer')
+        if not origin:
+            return None
+        if urlparse(origin).netloc == request.host:
+            return None
+        app.logger.warning('Tolak permintaan lintas origin: %s -> %s', origin, request.path)
+        abort(403, description='Permintaan ditolak: origin tidak cocok.')
     
     # Initialize database tables and defaults
     create_tables()
@@ -189,9 +227,48 @@ def create_app():
     # =============================================================================
     
     @app.route('/')
-    @login_required
     def index():
-        return redirect(url_for('dashboard'))
+        if current_user.is_authenticated:
+            return redirect(url_for('dashboard'))
+        return public_jadwal()
+
+    @app.route('/jadwal')
+    def public_jadwal():
+        """Halaman publik read-only: siapa yang standby pada bulan terpilih.
+
+        Sengaja tanpa login (permintaan owner) tapi hanya memuat nama + divisi.
+        Jangan tambahkan telegram_username, absensi, atau data admin di sini.
+        """
+        today = today_wita()
+        year = request.args.get('year', today.year, type=int)
+        month = request.args.get('month', today.month, type=int)
+        if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+            year, month = today.year, today.month
+
+        jadwal_per_tanggal, month_calendar, days_in_month = build_public_month(year, month)
+        stats = {
+            'total': sum(len(rows) for rows in jadwal_per_tanggal.values()),
+            'active_days': len(jadwal_per_tanggal),
+            'days_in_month': days_in_month,
+        }
+
+        prev_month = month - 1 if month > 1 else 12
+        prev_year = year if month > 1 else year - 1
+        next_month = month + 1 if month < 12 else 1
+        next_year = year if month < 12 else year + 1
+
+        return render_template('public_jadwal.html',
+            year=year,
+            month=month,
+            month_name=NAMA_BULAN[month],
+            month_calendar=month_calendar,
+            jadwal_per_tanggal=jadwal_per_tanggal,
+            stats=stats,
+            prev_month=prev_month,
+            prev_year=prev_year,
+            next_month=next_month,
+            next_year=next_year,
+        )
     
     @app.route('/dashboard')
     @login_required
@@ -471,8 +548,9 @@ def create_app():
                 flash('Gagal menambahkan jadwal.', 'error')
         except ValueError:
             flash('User ID tidak valid.', 'error')
-        except Exception as e:
-            flash(f'Error: {str(e)}', 'error')
+        except Exception:
+            app.logger.exception('Gagal menambah jadwal manual (user_id=%s, tanggal=%s)', user_id, tanggal)
+            flash('Terjadi kesalahan saat menyimpan jadwal. Silakan coba lagi.', 'error')
         
         return redirect(url_for('schedules'))
     
@@ -727,8 +805,9 @@ def create_app():
             
         except ValueError:
             flash('Format bulan, tahun, atau batasan tidak valid.', 'error')
-        except Exception as e:
-            flash(f'Terjadi error: {str(e)}', 'error')
+        except Exception:
+            app.logger.exception('Gagal set batasan bulanan (%s/%s)', bulan, tahun)
+            flash('Terjadi kesalahan saat menyimpan batasan bulanan.', 'error')
         
         return redirect(url_for('daily_limits'))
 

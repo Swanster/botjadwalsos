@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VARNION SOS - Jadwal Standby</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        border: "hsl(var(--border))",
+                        input: "hsl(var(--input))",
+                        ring: "hsl(var(--ring))",
+                        background: "hsl(var(--background))",
+                        foreground: "hsl(var(--foreground))",
+                        primary: {
+                            DEFAULT: "hsl(var(--primary))",
+                            foreground: "hsl(var(--primary-foreground))",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(var(--secondary))",
+                            foreground: "hsl(var(--secondary-foreground))",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(var(--muted))",
+                            foreground: "hsl(var(--muted-foreground))",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(var(--accent))",
+                            foreground: "hsl(var(--accent-foreground))",
+                        },
+                        destructive: {
+                            DEFAULT: "hsl(var(--destructive))",
+                            foreground: "hsl(var(--destructive-foreground))",
+                        },
+                        card: {
+                            DEFAULT: "hsl(var(--card))",
+                            foreground: "hsl(var(--card-foreground))",
+                        },
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        heading: ['Outfit', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        command: '0 30px 90px rgba(0, 0, 0, 0.42)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer base {
+            :root {
+                --background: 218 24% 7%;
+                --foreground: 0 0% 98%;
+                --card: 218 22% 10%;
+                --card-foreground: 0 0% 98%;
+                --primary: 24 95% 56%;
+                --primary-foreground: 0 0% 100%;
+                --secondary: 182 33% 38%;
+                --secondary-foreground: 0 0% 98%;
+                --muted: 218 18% 18%;
+                --muted-foreground: 212 16% 74%;
+                --accent: 210 16% 16%;
+                --accent-foreground: 0 0% 98%;
+                --destructive: 0 84% 60%;
+                --destructive-foreground: 0 0% 98%;
+                --border: 210 18% 22%;
+                --input: 210 18% 24%;
+                --ring: 24 95% 56%;
+                --radius: 0.75rem;
+            }
+
+            body {
+                @apply min-h-screen bg-background text-foreground font-sans antialiased selection:bg-primary/30;
+                -webkit-tap-highlight-color: transparent;
+            }
+
+            h1, h2, h3 { @apply font-heading; }
+        }
+
+        .landing-bg {
+            background-image:
+                linear-gradient(90deg, rgba(8, 12, 18, 0.98) 0%, rgba(8, 12, 18, 0.88) 34%, rgba(8, 12, 18, 0.42) 68%, rgba(8, 12, 18, 0.18) 100%),
+                linear-gradient(180deg, rgba(8, 12, 18, 0.16) 0%, rgba(8, 12, 18, 0.78) 100%),
+                url("{{ url_for('static', filename='images/landing-ops-command.png') }}");
+            background-position: center;
+            background-size: cover;
+        }
+
+        .glass-panel {
+            background: rgba(10, 17, 25, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 30px 90px rgba(0, 0, 0, 0.38);
+            backdrop-filter: blur(22px);
+        }
+
+        .control-surface {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.13);
+            backdrop-filter: blur(18px);
+        }
+
+        .calendar-tile {
+            @apply relative transition-all duration-200 overflow-hidden;
+            min-height: 5.25rem;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(249, 115, 22, 0.48); border-radius: 20px; }
+
+        @media (max-width: 768px) {
+            .landing-bg {
+                background-image:
+                    linear-gradient(180deg, rgba(8, 12, 18, 0.98) 0%, rgba(8, 12, 18, 0.86) 48%, rgba(8, 12, 18, 0.72) 100%),
+                    url("{{ url_for('static', filename='images/landing-ops-command.png') }}");
+                background-position: 64% center;
+            }
+
+            .calendar-tile {
+                min-height: 4.5rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <main class="landing-bg min-h-screen">
+        <div class="min-h-screen px-4 py-4 md:px-8 md:py-6 flex flex-col">
+            <header class="mx-auto w-full max-w-7xl flex items-center justify-between gap-4">
+                <a href="{{ url_for('public_jadwal') }}" class="flex items-center gap-3 min-w-0">
+                    <div class="h-11 w-11 rounded-xl bg-primary text-white flex items-center justify-center text-xl font-black shadow-lg shadow-primary/30">V</div>
+                    <div class="min-w-0">
+                        <p class="text-sm font-black tracking-tight text-white">Varnion SOS</p>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.28em] text-primary">Standby Operations</p>
+                    </div>
+                </a>
+
+                <a href="{{ url_for('login') }}" class="inline-flex items-center justify-center gap-2 rounded-lg bg-white text-slate-950 px-4 py-2.5 text-xs md:text-sm font-black shadow-xl shadow-black/20 transition hover:bg-primary hover:text-white active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg>
+                    Masuk Admin
+                </a>
+            </header>
+
+            <section class="mx-auto w-full max-w-7xl flex-1 flex flex-col gap-6 py-8 md:py-10">
+                <div class="max-w-3xl">
+                    <div class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/8 px-3 py-2 text-[10px] font-black uppercase tracking-[0.24em] text-orange-100 backdrop-blur-md">
+                        <span class="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.8)]"></span>
+                        Jadwal Standby {{ month_name }} {{ year }}
+                    </div>
+
+                    <h1 class="mt-5 text-4xl md:text-6xl font-black tracking-tight leading-[0.92] text-white">
+                        SIAPA YANG SOS?
+                    </h1>
+                    <p class="mt-4 max-w-2xl text-sm md:text-base leading-7 text-slate-200">
+                        Halaman terbuka: siapa saja yang memegang standby pada bulan ini.
+                        Untuk mengisi atau mengubah jadwal, gunakan bot Telegram.
+                    </p>
+
+                    <div class="mt-6 grid grid-cols-2 md:grid-cols-3 gap-3 max-w-xl">
+                        <div class="control-surface rounded-lg p-4">
+                            <p class="text-2xl md:text-3xl font-black text-white">{{ stats.total }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-300">Slot Terisi</p>
+                        </div>
+                        <div class="control-surface rounded-lg p-4">
+                            <p class="text-2xl md:text-3xl font-black text-white">{{ stats.active_days }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-300">Hari Terisi</p>
+                        </div>
+                        <div class="control-surface rounded-lg p-4">
+                            <p class="text-2xl md:text-3xl font-black text-white">{{ stats.days_in_month }}</p>
+                            <p class="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-300">Hari di Bulan</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="jadwal" class="glass-panel rounded-xl md:rounded-2xl p-3 md:p-5">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                        <div>
+                            <p class="text-[10px] font-black uppercase tracking-[0.24em] text-primary">Kalender Standby</p>
+                            <h2 class="text-2xl md:text-3xl font-black tracking-tight text-white">{{ month_name }} {{ year }}</h2>
+                        </div>
+
+                        <div class="flex items-center gap-2 rounded-lg border border-white/12 bg-white/8 p-1.5">
+                            <a href="{{ url_for('public_jadwal', year=prev_year, month=prev_month) }}"
+                               class="h-9 w-9 flex items-center justify-center rounded-md text-slate-300 hover:bg-white/12 hover:text-white transition active:scale-95" aria-label="Bulan sebelumnya">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                            </a>
+                            <a href="{{ url_for('public_jadwal') }}" class="min-w-24 text-center">
+                                <p class="text-sm font-black text-white">{{ month_name }}</p>
+                                <p class="text-[9px] font-black uppercase tracking-widest text-primary">{{ year }}</p>
+                            </a>
+                            <a href="{{ url_for('public_jadwal', year=next_year, month=next_month) }}"
+                               class="h-9 w-9 flex items-center justify-center rounded-md text-slate-300 hover:bg-white/12 hover:text-white transition active:scale-95" aria-label="Bulan berikutnya">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-7 gap-1.5 md:gap-2 mb-2">
+                        {% for day_name in ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'] %}
+                            <div class="rounded-md border border-white/8 bg-white/6 py-2 text-center text-[8px] md:text-[10px] font-black uppercase tracking-widest text-slate-300">
+                                {{ day_name[:3] }}
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="grid grid-cols-7 gap-1.5 md:gap-2">
+                        {% for week in month_calendar %}
+                            {% for day in week %}
+                                {% set date_str = '%04d-%02d-%02d'|format(year, month, day) if day != 0 else '' %}
+                                <div class="calendar-tile rounded-lg border
+                                    {% if day == 0 %} border-transparent bg-white/[0.02] opacity-30
+                                    {% elif date_str in jadwal_per_tanggal %} border-primary/35 bg-white/10
+                                    {% else %} border-white/8 bg-white/[0.045] {% endif %}">
+
+                                    {% if day != 0 %}
+                                        <div class="absolute -right-1 -bottom-2 text-4xl md:text-5xl font-black pointer-events-none
+                                            {% if date_str in jadwal_per_tanggal %} text-primary/10
+                                            {% else %} text-white/5 {% endif %}">
+                                            {{ day }}
+                                        </div>
+
+                                        <div class="relative flex h-full flex-col gap-1.5 p-2">
+                                            <span class="text-sm md:text-lg font-black text-white">{{ day }}</span>
+
+                                            <div class="min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5 custom-scrollbar">
+                                                {% if date_str in jadwal_per_tanggal %}
+                                                    {% for j in jadwal_per_tanggal[date_str] %}
+                                                        <div class="rounded-md border border-white/10 bg-black/24 px-1.5 py-1 shadow-sm">
+                                                            <p class="truncate text-[8px] md:text-[10px] font-black text-white" title="{{ j.username }}">{{ j.username }}</p>
+                                                            <p class="truncate text-[7px] md:text-[8px] font-bold uppercase tracking-wide text-primary">{{ j.group_name or '-' }}</p>
+                                                        </div>
+                                                    {% endfor %}
+                                                {% else %}
+                                                    <div class="flex h-full items-end">
+                                                        <span class="text-[8px] font-bold text-slate-500">Kosong</span>
+                                                    </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </section>
+
+            <footer class="mx-auto w-full max-w-7xl pb-2 text-[10px] font-semibold text-slate-500">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-t border-white/10 pt-4">
+                    <p>&copy; 2026 VARNION INFRA TIM - Standby Operational System</p>
+                    <p>Asia/Makassar operational view &middot; halaman publik (tanpa login)</p>
+                </div>
+            </footer>
+        </div>
+    </main>
+</body>
+</html>

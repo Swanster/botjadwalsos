@@ -10,6 +10,7 @@ import pytz
 import time
 
 from config import ALLOWED_TOPIC_ID
+from handlers.access import deny_private_callback, private_denied
 import core.database as db
 from core.database import (
     get_bulan_dibuka, get_bulan_dibuka_list, get_konfigurasi, get_jadwal_for_month,
@@ -32,6 +33,7 @@ SAVE_ERROR_MESSAGES = {
 
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets
 from core.schedule_recap import generate_rekap_text as build_rekap_text
+from core.telegram_text import escape_markdown
 
 # Variabel global
 user_selections, user_cuti_selections = {}, {}
@@ -42,7 +44,12 @@ HARI_MAP_ID = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'S
 EMOJI_HARI = {'Senin':'🌞','Selasa':'📘','Rab':'📗','Kamis':'📙','Jumat':'📕','Sabtu':'🎉','Minggu':'🛌'}
 
 def is_allowed(message):
-    """Cek apakah message berasal dari chat yang diizinkan."""
+    """Cek apakah message berasal dari chat yang diizinkan.
+
+    Chat pribadi: hanya admin (ADMIN_ID). Anggota tim memakai grup/topik.
+    """
+    if private_denied(message.chat.type, message.from_user.id):
+        return False
     if message.chat.type == 'private': 
         return True
     if message.chat.type in ['group', 'supergroup']:
@@ -392,7 +399,7 @@ def register_user_handlers(bot: telebot.TeleBot):
             usernames = absensi_per_tanggal[tgl_obj]
             pesan += f"*{format_tanggal_indonesia(tgl_obj)}*:\n"
             for username in usernames:
-                pesan += f"  - @{username}\n"
+                pesan += f"  - @{escape_markdown(username)}\n"
             pesan += "\n"
 
         bot.send_message(chat_id, pesan, parse_mode='Markdown', message_thread_id=thread_id)
@@ -496,6 +503,8 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('menu_'))
     def handle_menu_callbacks(call):
+        if deny_private_callback(bot, call):
+            return
         thread_id = call.message.message_thread_id
         action = call.data[5:]
 
@@ -522,6 +531,8 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('reason_'))
     def handle_calendar_reason_callbacks(call):
+        if deny_private_callback(bot, call):
+            return
         parts = call.data.split('_', 2)
         reason = parts[1] if len(parts) > 1 else ''
         tanggal_str = parts[2] if len(parts) > 2 else ''
@@ -547,6 +558,8 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('openmonth_'))
     def handle_open_month_callbacks(call):
+        if deny_private_callback(bot, call):
+            return
         parts = call.data.split('_')
         if len(parts) != 3:
             bot.answer_callback_query(call.id, "Pilihan bulan tidak valid.", show_alert=True)
@@ -558,6 +571,8 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('pick_') and not call.data.startswith('pick_tukar_'))
     def handle_pick_month(call):
+        if deny_private_callback(bot, call):
+            return
         parts = call.data.split('_')
         if len(parts) < 4:
             bot.answer_callback_query(call.id, "Pilihan bulan tidak valid.", show_alert=True)
@@ -588,6 +603,8 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda call: call.data.split('_')[0] in ['jadwal', 'cuti', 'view', 'batal'])
     def handle_all_callbacks(call):
+        if deny_private_callback(bot, call):
+            return
         parts = call.data.split('_')
         mode = parts[0]
         user_id = call.from_user.id
@@ -650,7 +667,7 @@ def register_user_handlers(bot: telebot.TeleBot):
                         petugas = get_jadwal_for_specific_date(current_date.strftime('%Y-%m-%d'))
                         nama_hari = HARI_MAP_ID[current_date.weekday()]
                         if petugas:
-                            pesan += f"*{nama_hari}*, {current_date.day}: {', '.join([p['username'] for p in petugas])}\n"
+                            pesan += f"*{nama_hari}*, {current_date.day}: {', '.join(escape_markdown(p['username']) for p in petugas)}\n"
                         else:
                             pesan += f"*{nama_hari}*, {current_date.day}: _(kosong)_\n"
                     try:

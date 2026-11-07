@@ -5,6 +5,8 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime
 
 from config import GROUP_CHAT_ID, ALLOWED_TOPIC_ID
+from handlers.access import deny_private_callback, private_denied
+from core.telegram_text import escape_markdown
 from core.database import (
     get_bulan_dibuka_list, get_user_jadwal_for_month, get_user_by_telegram_username,
     create_tukar_request, get_tukar_request_by_id, execute_swap,
@@ -86,6 +88,8 @@ def register_swap_handlers(bot: telebot.TeleBot):
 
     @bot.message_handler(commands=['tukar_jadwal'])
     def handle_tukar_jadwal(message):
+        if private_denied(message.chat.type, message.from_user.id):
+            return
         user_id = message.from_user.id
         thread_id = message.message_thread_id
         bulan_terbuka_list = get_bulan_dibuka_list()
@@ -106,6 +110,8 @@ def register_swap_handlers(bot: telebot.TeleBot):
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('pick_tukar_'))
     def handle_pick_tukar(call):
+        if deny_private_callback(bot, call):
+            return
         parts = call.data.split('_')
         tahun, bulan = int(parts[-2]), int(parts[-1])
         start_tukar_flow(call.message.chat.id, call.from_user.id, call.message.message_thread_id, tahun, bulan)
@@ -114,6 +120,8 @@ def register_swap_handlers(bot: telebot.TeleBot):
     @bot.callback_query_handler(func=lambda call: call.data.startswith('swap_'))
     def handle_swap_callbacks(call):
         # ... (logika callback kembali ke versi mention) ...
+        if deny_private_callback(bot, call):
+            return
         parts = call.data.split('_'); action = parts[1]; user_id = call.from_user.id; thread_id = call.message.message_thread_id
         if action == 'selectA':
             tanggal_a = parts[2]
@@ -134,7 +142,8 @@ def register_swap_handlers(bot: telebot.TeleBot):
                 return
             tgl_a_obj = datetime.strptime(data['tanggal_a'], '%Y-%m-%d').date()
             tgl_b_obj = datetime.strptime(data['tanggal_b'], '%Y-%m-%d').date()
-            pesan = (f"Konfirmasi Pertukaran Jadwal:\n\nJadwal Anda: *{format_tanggal_indonesia(tgl_a_obj)}*\nAkan ditukar dengan jadwal @{data['user_b_username']}:\nJadwal @{data['user_b_username']}: *{format_tanggal_indonesia(tgl_b_obj)}*\n\nApakah Anda yakin?")
+            nama_b = escape_markdown(data['user_b_username'])
+            pesan = (f"Konfirmasi Pertukaran Jadwal:\n\nJadwal Anda: *{format_tanggal_indonesia(tgl_a_obj)}*\nAkan ditukar dengan jadwal @{nama_b}:\nJadwal @{nama_b}: *{format_tanggal_indonesia(tgl_b_obj)}*\n\nApakah Anda yakin?")
             markup = InlineKeyboardMarkup()
             markup.row(InlineKeyboardButton("✅ Ya, Kirim", callback_data="swap_confirm"), InlineKeyboardButton("❌ Batal", callback_data="swap_cancel"))
             bot.edit_message_text(pesan, call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode='Markdown')
@@ -150,8 +159,9 @@ def register_swap_handlers(bot: telebot.TeleBot):
             request_id = create_tukar_request(user_id, call.from_user.first_name, data['user_b_id'], data['tanggal_a'], data['tanggal_b'])
             tgl_a_obj = datetime.strptime(data['tanggal_a'], '%Y-%m-%d').date()
             tgl_b_obj = datetime.strptime(data['tanggal_b'], '%Y-%m-%d').date()
-            user_b_mention = f"[@{data['user_b_username']}](tg://user?id={data['user_b_id']})"
-            pesan_request = (f"🔔 Permintaan Tukar Jadwal\n\nHai {user_b_mention}, pengguna *{call.from_user.first_name}* ingin bertukar jadwal dengan Anda:\n\n*{call.from_user.first_name}* memberikan jadwalnya pada *{format_tanggal_indonesia(tgl_a_obj)}*,\ndan ingin mengambil jadwal Anda pada *{format_tanggal_indonesia(tgl_b_obj)}*.\n\nApakah Anda setuju?")
+            user_b_mention = f"[@{escape_markdown(data['user_b_username'])}](tg://user?id={data['user_b_id']})"
+            nama_a = escape_markdown(call.from_user.first_name)
+            pesan_request = (f"🔔 Permintaan Tukar Jadwal\n\nHai {user_b_mention}, pengguna *{nama_a}* ingin bertukar jadwal dengan Anda:\n\n*{nama_a}* memberikan jadwalnya pada *{format_tanggal_indonesia(tgl_a_obj)}*,\ndan ingin mengambil jadwal Anda pada *{format_tanggal_indonesia(tgl_b_obj)}*.\n\nApakah Anda setuju?")
             markup = InlineKeyboardMarkup()
             markup.row(InlineKeyboardButton("✅ Setuju", callback_data=f"swap_approve_{request_id}"), InlineKeyboardButton("❌ Tolak", callback_data=f"swap_reject_{request_id}"))
             bot.send_message(GROUP_CHAT_ID, pesan_request, reply_markup=markup, parse_mode='Markdown', message_thread_id=ALLOWED_TOPIC_ID)
@@ -169,8 +179,8 @@ def register_swap_handlers(bot: telebot.TeleBot):
             if user_id != req['user_b_id']:
                 bot.answer_callback_query(call.id, "Ini bukan permintaan untuk Anda.", show_alert=True)
                 return
-            user_b_mention = f"[{call.from_user.first_name}](tg://user?id={call.from_user.id})"
-            user_a_mention = f"[{req['user_a_username']}](tg://user?id={req['user_a_id']})"
+            user_b_mention = f"[{escape_markdown(call.from_user.first_name)}](tg://user?id={call.from_user.id})"
+            user_a_mention = f"[{escape_markdown(req['user_a_username'])}](tg://user?id={req['user_a_id']})"
             if action == 'approve':
                 result = execute_swap(request_id)
                 if result.ok:

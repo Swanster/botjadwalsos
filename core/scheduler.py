@@ -20,6 +20,7 @@ from core.database import (
     get_group_quota, get_monthly_limit_for_group
 )
 from core.monthly_report import build_monthly_report, format_monthly_report_for_telegram
+from core.telegram_text import escape_markdown
 from core.schedule_recap import generate_rekap_text
 
 # Decorator retry_on_failure (TETAP SAMA)
@@ -76,7 +77,7 @@ def kirim_pengingat_harian(bot):
     # Bagian Petugas Standby
     pesan += "✅ *Petugas Standby Hari Ini:*\n"
     if petugas_standby:
-        mentions = [f"[{_escape_markdown_text(p['username'])}](tg://user?id={p['user_id']})" for p in petugas_standby]
+        mentions = [f"[{escape_markdown(p['username'])}](tg://user?id={p['user_id']})" for p in petugas_standby]
         pesan += ' • ' + '\n • '.join(mentions) + "\n\n"
     else:
         pesan += "_Tidak ada yang standby hari ini._\n\n"
@@ -84,7 +85,7 @@ def kirim_pengingat_harian(bot):
     # Bagian Petugas Cuti
     pesan += "⛔️ *Anggota yang Cuti/Tidak Tersedia:*\n"
     if petugas_cuti:
-        nama_cuti = [p['username'] for p in petugas_cuti]
+        nama_cuti = [escape_markdown(p['username']) for p in petugas_cuti]
         pesan += ' • ' + '\n • '.join(nama_cuti) + "\n\n"
     else:
         pesan += "_Tidak ada yang cuti hari ini._\n\n"
@@ -156,20 +157,15 @@ def kirim_laporan_cuti_mingguan(bot):
     print(f"Scheduler: Laporan cuti mingguan berhasil dikirim.")
 
     
-def _escape_markdown_text(value):
-    """Escape basic Markdown chars for Telegram parse_mode=Markdown."""
-    return str(value or '').replace('\\', '\\\\').replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
-
-
 def _mention_handle(handle):
     """@handle siap-Markdown: '@' plus handle yang di-escape."""
-    return '@' + _escape_markdown_text(str(handle).lstrip('@'))
+    return '@' + escape_markdown(str(handle).lstrip('@'))
 
 
 def _format_user_mention(user):
     if user['telegram_username']:
         return _mention_handle(user['telegram_username'])
-    safe_name = _escape_markdown_text(user['username']) or 'pengguna'
+    safe_name = escape_markdown(user['username']) or 'pengguna'
     return f"[{safe_name}](tg://user?id={user['user_id']})"
 
 

@@ -7,6 +7,7 @@ import requests
 import sys
 import logging
 import random
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -22,6 +23,27 @@ from handlers.admin_handlers import register_admin_handlers
 from handlers.user_handlers import register_user_handlers, register_help_handler
 from handlers.swap_handler import register_swap_handlers
 
+BOT_URL_TOKEN = re.compile(r'/bot[^/\s\'"]+')
+
+
+def redact_secrets(text):
+    """Buang token bot dari teks log.
+
+    requests/telebot menaruh URL penuh (termasuk token) di pesan exception, jadi
+    log error koneksi bisa membocorkan kredensial bot kalau ditulis apa adanya.
+    """
+    text = str(text)
+    if API_TOKEN:
+        text = text.replace(API_TOKEN, '<redacted>')
+    return BOT_URL_TOKEN.sub('/bot<redacted>', text)
+
+
+class RedactSecretsFormatter(logging.Formatter):
+    """Formatter terakhir sebelum log ditulis: kunci bebas token, termasuk traceback."""
+
+    def format(self, record):
+        return redact_secrets(super().format(record))
+
 
 class BotManager:
     """Class untuk mengelola lifecycle bot dengan lebih baik"""
@@ -34,15 +56,18 @@ class BotManager:
         self.last_successful_poll = None
         
     def setup_logging(self):
-        """Konfigurasi logging ke file + console dengan rotasi"""
+        """Konfigurasi logging ke file + console dengan rotasi (token selalu diredaksi)"""
+        formatter = RedactSecretsFormatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s")
         logging.basicConfig(
             level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+            force=True,  # root handler selalu milik kita, jadi formatter redaksi pasti terpasang
             handlers=[
                 logging.FileHandler("log_bot.txt", encoding='utf-8'),
                 logging.StreamHandler(sys.stdout)
             ]
         )
+        for handler in logging.getLogger().handlers:
+            handler.setFormatter(formatter)
         
     def check_api_connection(self) -> bool:
         """Cek koneksi awal ke Telegram API"""

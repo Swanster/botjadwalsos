@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import date
 
 from core.database import get_jadwal_for_month
+from core.telegram_text import escape_markdown
 
 NAMA_BULAN = {
     1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
@@ -28,7 +29,7 @@ def generate_rekap_text(tahun, bulan):
         nama_hari = HARI_MAP_ID[current_date.weekday()]
         petugas = jadwal_per_hari.get(current_date_str)
         if petugas:
-            pesan += f"*{current_date.day}* {nama_hari}: {', '.join(petugas)}\n"
+            pesan += f"*{current_date.day}* {nama_hari}: {', '.join(escape_markdown(p) for p in petugas)}\n"
         else:
             pesan += f"*{current_date.day}* {nama_hari}: _(kosong)_\n"
 

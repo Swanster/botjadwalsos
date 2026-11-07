@@ -16,7 +16,8 @@ from core.database import (
     get_user_by_telegram_username, set_user_group, get_all_months_status,
     get_all_registered_users, today_wita
 )
-from core.google_sheets import get_google_sheets_client
+from core.google_sheets import get_google_sheets_client, sync_jadwal_to_sheets
+from core.telegram_text import escape_markdown
 
 NAMA_BULAN = {
     1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
@@ -110,7 +111,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 f"📨 Blast DM member: {success_count} terkirim"
             )
             if failed_users:
-                failed_preview = ', '.join(f"@{username}" for username in failed_users[:10])
+                failed_preview = ', '.join(f"@{escape_markdown(username)}" for username in failed_users[:10])
                 if len(failed_users) > 10:
                     failed_preview += f", dan {len(failed_users) - 10} lainnya"
                 reply_text += f"\n⚠️ Gagal DM: {failed_preview}"
@@ -230,7 +231,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         
         pesan += "👤 *Rekap per Pengguna:*\n"
         for nama, jumlah in sorted_rekap_user:
-            pesan += f"- {nama}: *{jumlah}* kali\n"
+            pesan += f"- {escape_markdown(nama)}: *{jumlah}* kali\n"
             
         pesan += "\n🗓️ *Rekap per Hari:*\n"
         for hari in HARI_MAP_ID.values(): # Loop sesuai urutan Senin-Minggu
