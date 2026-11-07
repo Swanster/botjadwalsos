@@ -78,3 +78,26 @@ def test_login_rate_limited_after_five_failures(tmp_path, monkeypatch):
 
     assert "Terlalu banyak percobaan" in body
     web_app.LOGIN_ATTEMPTS.clear()
+
+
+def test_secret_key_is_stable_across_restarts(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+
+    from web.app import _load_secret_key
+
+    first = _load_secret_key()
+    second = _load_secret_key()
+
+    assert first == second
+    assert len(first) >= 16
+
+
+def test_web_host_defaults_to_localhost(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.delenv("WEB_HOST", raising=False)
+
+    reloaded = importlib.reload(config)
+
+    assert reloaded.WEB_HOST == "127.0.0.1"
+    assert isinstance(reloaded.WEB_PORT, int)

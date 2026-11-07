@@ -39,3 +39,6 @@ Thumbs.db
 venv/
 ENV/
 .worktrees/
+
+# Flask session secret generated at runtime
+.secret_key

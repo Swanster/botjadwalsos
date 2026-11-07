@@ -13,7 +13,7 @@ from typing import Optional
 # Import spesifik untuk menangani error API Telegram
 from telebot.apihelper import ApiTelegramException, ApiException
 
-from config import API_TOKEN, ADMIN_ID, GROUP_CHAT_ID
+from config import API_TOKEN, ADMIN_ID, GROUP_CHAT_ID, WEB_HOST, WEB_PORT
 from core.database import create_tables, populate_default_config, init_default_admin
 from core.scheduler import init_scheduler
 
@@ -302,11 +302,11 @@ def run_web_server():
     flask_log = flask_logging.getLogger('werkzeug')
     flask_log.setLevel(flask_logging.WARNING)
     
-    logging.info("🌐 Web Dashboard running at http://localhost:5050")
-    
+    logging.info(f"🌐 Web Dashboard running at http://{WEB_HOST}:{WEB_PORT}")
+
     # Use threaded=False to avoid signal handling issues
     from werkzeug.serving import make_server
-    server = make_server('0.0.0.0', 5050, app, threaded=True)
+    server = make_server(WEB_HOST, WEB_PORT, app, threaded=True)
     server.serve_forever()
 
 

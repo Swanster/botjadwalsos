@@ -32,6 +32,7 @@ from core.database import (
 )
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets, get_google_sheets_client
 from core.monthly_report import build_monthly_report
+from config import SECRET_KEY, WEB_HOST, WEB_PORT
 
 # =============================================================================
 # FLASK APP SETUP (Fixed - removed settings dependency, added daily limits validation)
@@ -40,6 +41,25 @@ from core.monthly_report import build_monthly_report
 LOGIN_ATTEMPTS = {}          # ip -> (count, first_attempt_ts)
 LOGIN_WINDOW_SECONDS = 300
 LOGIN_MAX_ATTEMPTS = 5
+
+
+def _load_secret_key():
+    """SECRET_KEY stabil: env, atau file .secret_key di samping database (dibuat sekali)."""
+    if SECRET_KEY:
+        return SECRET_KEY
+    import core.database as db_core
+
+    data_dir = os.path.dirname(db_core.DB_NAME) or '.'
+    path = os.path.join(data_dir, '.secret_key')
+    if os.path.exists(path):
+        with open(path, 'rb') as handle:
+            return handle.read()
+    key = os.urandom(24)
+    os.makedirs(data_dir, exist_ok=True)
+    with open(path, 'wb') as handle:
+        handle.write(key)
+    os.chmod(path, 0o600)
+    return key
 
 
 def _login_blocked(ip):
@@ -59,7 +79,7 @@ def _register_login_failure(ip):
 
 def create_app():
     app = Flask(__name__)
-    app.secret_key = os.urandom(24)
+    app.secret_key = _load_secret_key()
     
     # Initialize database tables and defaults
     create_tables()
@@ -796,4 +816,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(host='0.0.0.0', port=5050, debug=True)
+    app.run(host=WEB_HOST, port=WEB_PORT, debug=False)
