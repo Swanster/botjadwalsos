@@ -88,3 +88,20 @@ def test_monthly_report_keeps_group_labels(tmp_path, monkeypatch):
     labels = {group["group_name"]: group["group_label"] for group in report["per_group"]}
     assert labels["INFRA_DELIVERY"] == "Infra Delivery"
     assert labels["INFRA_OPERATION"] == "Infra Operation"
+
+
+def test_add_jadwal_manual_runs_one_atomic_mutation(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    calls = {"n": 0}
+    original = db._run_mutation_with_retry
+
+    def counting(operation):
+        calls["n"] += 1
+        return original(operation)
+
+    monkeypatch.setattr(db, "_run_mutation_with_retry", counting)
+
+    assert db.add_jadwal_manual(1, "Op User", "op_user", "2026-11-10") is True
+    assert calls["n"] == 1, "cek kuota dan insert harus dalam satu transaksi"
+    assert db.add_jadwal_manual(1, "Op User", "op_user", "2026-11-10") is False
+    assert len(db.get_jadwal_for_specific_date("2026-11-10")) == 1

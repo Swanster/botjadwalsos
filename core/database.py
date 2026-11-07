@@ -1001,57 +1001,56 @@ def add_jadwal_manual(user_id, username, telegram_username, tanggal):
     Weekend (Sabtu/Minggu): admin web diizinkan mengisi user secara bebas,
     melewati kuota divisi, batas 1x Sabtu/Minggu per bulan, dan validasi balance.
     Weekday: mengikuti aturan kuota divisi seperti biasa.
+    Semua cek dan insert berjalan dalam satu transaksi (BEGIN IMMEDIATE) agar
+    dua admin yang menyimpan bersamaan tidak bisa melewati kuota.
     """
-    try:
-        is_weekend = datetime.strptime(tanggal, '%Y-%m-%d').date().weekday() in (5, 6)
+    is_weekend = datetime.strptime(tanggal, '%Y-%m-%d').date().weekday() in (5, 6)
+
+    def operation(conn):
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM jadwal WHERE user_id = ? AND tanggal = ?",
+            (user_id, tanggal),
+        )
+        if cur.fetchone():
+            return MutationResult(False, 'duplicate')
 
         if not is_weekend:
-            allowed, quota_group, _, _ = can_add_user_to_group_quota(user_id, tanggal)
-            if not allowed:
-                return False
+            group_name = _get_user_group_with_conn(conn, user_id)
+            if not group_name:
+                return MutationResult(False, 'invalid_group')
+            limit = _get_group_quota_with_conn(conn, group_name)
+            current = _get_group_assignment_count_for_date_with_conn(
+                conn, tanggal, group_name, exclude_user_id=user_id
+            )
+            if current >= limit:
+                return MutationResult(False, 'quota_full')
 
-        with connect_db() as conn:
-            cur = conn.cursor()
-            if not is_weekend:
-                if not can_user_take_weekend_date(user_id, tanggal, exclude_tanggal=tanggal):
-                    return False
-                target_date = datetime.strptime(tanggal, '%Y-%m-%d').date()
-                start_date = f"{target_date.year}-{target_date.month:02d}-01"
-                end_date = f"{target_date.year}-{target_date.month:02d}-{calendar.monthrange(target_date.year, target_date.month)[1]}"
-                cur.execute(
-                    "SELECT tanggal FROM jadwal WHERE user_id = ? AND tanggal BETWEEN ? AND ?",
-                    (user_id, start_date, end_date)
-                )
-                tanggal_list = [row['tanggal'] for row in cur.fetchall()]
-                if tanggal not in tanggal_list:
-                    tanggal_list.append(tanggal)
-                weekend_full = is_weekend_fallback_active_for_user(user_id, target_date.year, target_date.month)
-                balance_valid, _ = validate_weekday_weekend_balance(
-                    tanggal_list,
-                    weekday_limit=_get_weekday_allowance_with_conn(conn, quota_group),
-                    weekend_full=weekend_full,
-                )
-                if not balance_valid:
-                    return False
-            # Weekend: insert tanpa validasi kuota/balance.
-            # Tolak duplikat user+tanggal yang sama (bukan OR REPLACE agar tidak
-            # menimpa data valid secara silent).
-            cur.execute(
-                "SELECT 1 FROM jadwal WHERE user_id = ? AND tanggal = ?",
-                (user_id, tanggal)
+            target_date = datetime.strptime(tanggal, '%Y-%m-%d').date()
+            existing = [
+                row['tanggal']
+                for row in _get_user_jadwal_for_month_with_conn(conn, user_id, target_date.year, target_date.month)
+            ]
+            if tanggal not in existing:
+                existing.append(tanggal)
+            weekend_full = _is_weekend_fallback_active_for_user_with_conn(
+                conn, user_id, target_date.year, target_date.month
             )
-            if cur.fetchone():
-                print(f"add_jadwal_manual: user {user_id} sudah ada di {tanggal} (weekend duplikat ditolak).")
-                return False
-            cur.execute(
-                "INSERT INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)",
-                (user_id, username, telegram_username, tanggal)
+            balance_valid, _ = validate_weekday_weekend_balance(
+                existing,
+                weekday_limit=_get_weekday_allowance_with_conn(conn, group_name),
+                weekend_full=weekend_full,
             )
-            conn.commit()
-            return True
-    except Exception as e:
-        print(f"Error add_jadwal_manual: {e}")
-        return False
+            if not balance_valid:
+                return MutationResult(False, 'weekday_balance')
+
+        cur.execute(
+            "INSERT INTO jadwal (user_id, username, telegram_username, tanggal) VALUES (?, ?, ?, ?)",
+            (user_id, username, telegram_username, tanggal),
+        )
+        return MutationResult(True, rows_affected=1)
+
+    return _run_mutation_with_retry(operation).ok
 
 def delete_jadwal_by_id(jadwal_id):
     """Menghapus jadwal berdasarkan ID."""
