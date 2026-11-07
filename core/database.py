@@ -974,15 +974,23 @@ def update_admin_role(admin_id, role):
         return cur.rowcount > 0
 
 def init_default_admin():
-    """Inisialisasi admin default jika belum ada admin."""
+    """Pastikan ada super admin; buat akun 'admin' hanya bila DEFAULT_ADMIN_PASSWORD di-set."""
     with connect_db() as conn:
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM admin_users")
-        if cur.fetchone()[0] == 0:
-            add_admin_user('admin', 'admin123', 'super_admin')
-            print("🔐 Default super admin (admin/admin123) berhasil dibuat.")
-            return
+        has_admin = cur.fetchone()[0] > 0
 
+    if not has_admin:
+        password = os.environ.get('DEFAULT_ADMIN_PASSWORD')
+        if not password:
+            print("⚠️  Belum ada admin dashboard. Set DEFAULT_ADMIN_PASSWORD lalu jalankan ulang untuk membuat akun 'admin'.")
+            return
+        add_admin_user('admin', password, 'super_admin')
+        print("🔐 Admin default dibuat dari DEFAULT_ADMIN_PASSWORD.")
+        return
+
+    with connect_db() as conn:
+        cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM admin_users WHERE role = 'super_admin'")
         if cur.fetchone()[0] == 0:
             cur.execute("UPDATE admin_users SET role = 'super_admin' WHERE username = 'admin'")

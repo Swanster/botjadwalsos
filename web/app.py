@@ -127,58 +127,7 @@ def create_app():
             else:
                 flash('Username atau password salah.', 'error')
 
-        # Get calendar data for current month (like schedules page)
-        from datetime import date
-        today = today_wita()
-        year = request.args.get('year', today.year, type=int)
-        month = request.args.get('month', today.month, type=int)
-
-        # Get schedules for the month
-        jadwal_list = get_jadwal_for_month(year, month)
-
-        members_by_group, all_members = load_member_groups()
-
-        # Create user_id to group_name mapping
-        user_group_map = {}
-        for m in all_members:
-            user_group_map[m['user_id']] = m.get('group_name', '-')
-
-        # Organize by date and add group_name
-        jadwal_per_tanggal = {}
-        for j in jadwal_list:
-            tanggal = j['tanggal']
-            j_dict = dict(j)
-            # Add group_name from lookup
-            j_dict['group_name'] = user_group_map.get(j['user_id'], '-')
-            if tanggal not in jadwal_per_tanggal:
-                jadwal_per_tanggal[tanggal] = []
-            jadwal_per_tanggal[tanggal].append(j_dict)
-
-        # Calendar info
-        import calendar as cal_module
-        cal = cal_module.Calendar(firstweekday=cal_module.MONDAY)
-        month_calendar = cal.monthdayscalendar(year, month)
-
-        # Get daily limits for this month
-        daily_limits_info = {}
-        for week in month_calendar:
-            for day in week:
-                if day != 0:
-                    date_str = f'{year}-{month:02d}-{day:02d}'
-                    daily_limits_info[date_str] = get_date_capacity(date_str)
-
-        NAMA_BULAN = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
-                      7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
-
-        return render_template('login.html',
-            year=year,
-            month=month,
-            month_name=NAMA_BULAN[month],
-            month_calendar=month_calendar,
-            jadwal_per_tanggal=jadwal_per_tanggal,
-            all_members=all_members,
-            daily_limits=daily_limits_info
-        )
+        return render_template('login.html')
     
     @app.route('/logout')
     @login_required

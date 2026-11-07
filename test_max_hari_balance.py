@@ -210,6 +210,7 @@ def test_calendar_marks_date_taken_by_other_group_as_full(tmp_path, monkeypatch)
 
 def test_web_add_enforces_one_user_per_date_with_clear_message(tmp_path, monkeypatch):
     _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv('DEFAULT_ADMIN_PASSWORD', 'admin123')
     db.init_default_admin()
     db.set_user_group(201, 'Op User 1', 'op_user1', 'INFRA_OPERATION')
     db.set_user_group(202, 'Op User 2', 'op_user2', 'INFRA_OPERATION')
@@ -255,6 +256,7 @@ def test_web_add_enforces_one_user_per_date_with_clear_message(tmp_path, monkeyp
 def test_web_calendar_marks_taken_date_full(tmp_path, monkeypatch):
     """Halaman /schedules harus menandai tanggal terisi FULL sejalan gerbang."""
     _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv('DEFAULT_ADMIN_PASSWORD', 'admin123')
     db.init_default_admin()
     db.set_user_group(202, 'Apps User', 'apps_user', 'APPS')
 

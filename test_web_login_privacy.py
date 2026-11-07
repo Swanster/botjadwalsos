@@ -1,0 +1,62 @@
+"""Regression: dashboard tidak boleh membocorkan jadwal dan tidak boleh punya
+admin default yang dapat diduga (audit 2026-11-07).
+
+Sebelum perbaikan: GET /login merender kalender bulan penuh berisi nama anggota
+dan status jadwal, dan `init_default_admin` membuat admin/admin123 otomatis.
+"""
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, ROOT)
+
+import config
+from core import database as db
+
+
+def _setup(tmp_path, monkeypatch):
+    db_path = str(tmp_path / "web.sqlite")
+    monkeypatch.setattr(config, "DB_NAME", db_path)
+    monkeypatch.setattr(db, "DB_NAME", db_path)
+    db.create_tables()
+    db.init_default_settings()
+    db.set_user_group(777, "Rahasia", "rahasia_user", "APPS")
+    db.add_jadwal_manual(777, "Rahasia", "rahasia_user", "2026-11-10")
+    return db_path
+
+
+def _client():
+    from web.app import create_app
+
+    return create_app().test_client()
+
+
+def test_login_page_does_not_expose_schedule(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+
+    body = _client().get("/login").get_data(as_text=True)
+
+    assert "Rahasia" not in body
+    assert "rahasia_user" not in body
+    assert "2026-11-10" not in body
+    assert 'name="username"' in body, "form login harus tetap ada"
+
+
+def test_no_default_admin_without_env(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    monkeypatch.delenv("DEFAULT_ADMIN_PASSWORD", raising=False)
+
+    db.init_default_admin()
+
+    assert db.get_all_admin_users() == []
+
+
+def test_default_admin_created_from_env(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("DEFAULT_ADMIN_PASSWORD", "ganti-sekarang")
+
+    db.init_default_admin()
+
+    admins = db.get_all_admin_users()
+    assert [admin["username"] for admin in admins] == ["admin"]
+    assert db.verify_admin("admin", "ganti-sekarang") is not None
