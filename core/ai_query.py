@@ -1,5 +1,6 @@
 """LLM untuk /tanya — pertanyaan umum aman, konteks jadwal terbatas, fallback deterministik."""
 
+import json
 import logging
 import re
 import time
@@ -82,15 +83,48 @@ def build_context(today: date | None = None) -> str:
     return "\n".join(lines)
 
 
+def _parse_sse(text: str) -> dict:
+    """Gabungkan delta SSE menjadi bentuk respons chat completion biasa."""
+    parts = []
+    for line in text.splitlines():
+        if not line.startswith("data:"):
+            continue
+        data = line[5:].strip()
+        if not data or data == "[DONE]":
+            continue
+        try:
+            chunk = json.loads(data)
+        except ValueError:
+            continue
+        delta = ((chunk.get("choices") or [{}])[0].get("delta") or {}).get("content")
+        if delta:
+            parts.append(delta)
+    if not parts:
+        raise ValueError("SSE tidak berisi konten")
+    return {"choices": [{"message": {"content": "".join(parts)}}]}
+
+
 def _post_chat(payload: dict) -> dict:
+    payload = {**payload, "stream": False}
+    url = f"{config.AI_BASE_URL}/chat/completions"
     response = requests.post(
-        f"{config.AI_BASE_URL}/chat/completions",
+        url,
         headers={"Authorization": f"Bearer {config.AI_API_KEY}", "Content-Type": "application/json"},
         json=payload,
         timeout=config.AI_TIMEOUT,
     )
     response.raise_for_status()
-    return response.json()
+    if "text/event-stream" in (response.headers.get("content-type") or ""):
+        return _parse_sse(response.text)
+    try:
+        return response.json()
+    except ValueError:
+        body = (response.text or "").strip()[:200]
+        raise RuntimeError(
+            f"respons bukan JSON dari {url} "
+            f"(HTTP {response.status_code}, "
+            f"content-type={response.headers.get('content-type')!r}, body={body!r})"
+        ) from None
 
 
 def llm_answer(question: str, today: date | None = None) -> str:

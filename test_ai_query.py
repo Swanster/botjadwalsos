@@ -108,3 +108,12 @@ def test_detail_internal_program_ditolak_tanpa_llm(tmp_path, monkeypatch):
 def test_frasa_aman_sara_tidak_ikut_diblokir():
     assert ai_query.is_blocked_topic("jelaskan suku cadang motor") is False
     assert ai_query.is_blocked_topic("jelaskan suku bangsa di Indonesia") is True
+
+
+def test_parse_sse_menggabungkan_delta():
+    text = (
+        'data: {"choices":[{"delta":{"content":"Halo "}}]}\n\n'
+        'data: {"choices":[{"delta":{"content":"dunia"}}]}\n\n'
+        'data: [DONE]\n\n'
+    )
+    assert ai_query._parse_sse(text)["choices"][0]["message"]["content"] == "Halo dunia"
