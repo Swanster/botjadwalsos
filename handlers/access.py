@@ -21,7 +21,7 @@ UNREGISTERED_TEXT = (
     "• /jadwal_saya — jadwal SOS pribadi\n"
     "• /cuti & /lihat_cuti — tandai dan lihat cuti\n"
     "• /tukar_jadwal — tukar jadwal dengan rekan\n"
-    "• /tanya — tanya jadwal pakai bahasa biasa\n\n"
+    "• /tanya — tanya bot (AI)\n\n"
     "Silakan hubungi admin untuk mendaftarkan ID Telegram Anda, lalu coba lagi."
 )
 

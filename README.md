@@ -32,14 +32,14 @@ proses yang sama.
 | `DEFAULT_ADMIN_PASSWORD` | sekali | Membuat akun dashboard `admin` saat start pertama bila belum ada admin |
 | `GOOGLE_SHEET_*` | tidak | Sync Sheets; tanpa kredensial fitur ini otomatis nonaktif |
 | `AI_BASE_URL` | tidak | Default `http://127.0.0.1:20128/v1` (9Router lokal) |
-| `AI_API_KEY` | tidak | API key 9Router; kosong = `/tanya` memakai parser deterministik |
+| `AI_API_KEY` | tidak | API key 9Router; kosong = `/tanya` hanya bisa jawab jadwal via parser deterministik |
 | `AI_MODEL` | tidak | Default `oc/deepseek-v4.1-flash-free` |
 
 ## Perintah bot
 
 Anggota: `/start`, `/menu`, `/jadwal_saya`, `/lihat_jadwal`, `/cuti`,
 `/lihat_cuti`, `/batal_jadwal`, `/batal_cuti`, `/tukar_jadwal`,
-`/tanya <pertanyaan>`, `/panduan`.
+`/tanya <pertanyaan>` (tanya bot AI), `/panduan`.
 
 Admin (private chat): `/buka_jadwal_bulan [bulan tahun]`,
 `/tutup_jadwal_bulan <bulan> <tahun>`, `/statistik`, `/upload_grup_csv`,

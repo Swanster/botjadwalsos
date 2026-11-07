@@ -222,6 +222,15 @@ def build_pesan_peringatan_pengisian_jadwal():
         f"👥 Anggota belum lengkap: *{total_belum_lengkap}*\n"
     )
 
+    # Peringatan lebih keras khusus Infra Operation: minimum 2x per bulan.
+    infra_op_kurang = [entry for entry in kurang_isi_by_group.get('INFRA_OPERATION', []) if entry[0] < 2]
+    if infra_op_kurang:
+        pesan += "\n🚨 *PERINGATAN KHUSUS INFRA OPERATION*\n"
+        pesan += "_Anggota berikut baru mengisi kurang dari 2x bulan ini:_\n"
+        for total, target, user in infra_op_kurang:
+            pesan += f"• {_format_user_mention(user)} — baru *{total}x* (minimum *2x*)\n"
+        pesan += "\nSegera lengkapi jadwal melalui /start.\n"
+
     if tanggal_kosong:
         pesan += "\n📅 *Tanggal belum penuh*\n"
         for tanggal_obj, terisi, limit in tanggal_kosong[:12]:

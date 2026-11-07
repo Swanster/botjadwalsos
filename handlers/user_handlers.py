@@ -33,8 +33,7 @@ SAVE_ERROR_MESSAGES = {
 
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets
 from core.schedule_recap import generate_rekap_text as build_rekap_text
-from core.schedule_query import SCOPE_MSG
-from core.ai_query import answer as ai_answer
+from core.ai_query import answer as ai_answer, ASK_HELP_MSG
 from core.telegram_text import escape_markdown
 
 # Variabel global
@@ -447,6 +446,7 @@ def register_user_handlers(bot: telebot.TeleBot):
             "*/jadwal_saya* - Menampilkan daftar jadwal pribadi Anda.\n"
             "*/cuti* - Menandai tanggal Anda tidak bersedia (cuti).\n"
             "*/lihat_cuti* - Menampilkan daftar cuti tim di bulan aktif.\n"
+            "*/tanya <pertanyaan>* - Tanya bot (AI): jadwal atau pertanyaan umum aman.\n"
             "*/tukar_jadwal* - Mengajukan pertukaran jadwal.\n"
             "*/batal_jadwal* - Membatalkan jadwal standby yang sudah ada.\n"
             "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
@@ -456,7 +456,8 @@ def register_user_handlers(bot: telebot.TeleBot):
             "- Infra Operation mengikuti maksimal hari/bulan yang diatur Admin (default 5).\n"
             "- APPS dan MONITORING mengikuti maksimal hari/bulan pada Settings.\n"
             "- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
-            "- Tukar jadwal harus tipe hari yang sama."
+            "- Tukar jadwal harus tipe hari yang sama.\n"
+            "- /tanya tidak melayani topik vulgar, politik, SARA, atau detail internal program."
         )
         bot.send_message(chat_id, help_text, parse_mode='Markdown', message_thread_id=thread_id)
 
@@ -485,7 +486,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         if not is_allowed(message, bot): return
         pertanyaan = message.text.split(' ', 1)[1] if ' ' in message.text else ''
         if not pertanyaan.strip():
-            bot.send_message(message.chat.id, SCOPE_MSG, message_thread_id=message.message_thread_id)
+            bot.send_message(message.chat.id, ASK_HELP_MSG, message_thread_id=message.message_thread_id)
             return
         bot.send_message(message.chat.id, ai_answer(pertanyaan), message_thread_id=message.message_thread_id)
 
@@ -873,6 +874,7 @@ def register_help_handler(bot: telebot.TeleBot):
                 "*/jadwal_saya* - Menampilkan daftar jadwal pribadi Anda.\n"
                 "*/cuti* - Menandai tanggal Anda tidak bersedia (cuti).\n"
                 "*/lihat_cuti* - Menampilkan daftar cuti tim di bulan aktif.\n"
+                "*/tanya <pertanyaan>* - Tanya bot (AI): jadwal atau pertanyaan umum aman.\n"
                 "*/tukar_jadwal* - Mengajukan pertukaran jadwal.\n"
                 "*/batal_jadwal* - Membatalkan jadwal standby yang sudah ada.\n"
                 "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
@@ -882,6 +884,7 @@ def register_help_handler(bot: telebot.TeleBot):
                 "- Infra Operation mengikuti maksimal hari/bulan yang diatur Admin (default 5).\n"
                 "- APPS dan MONITORING mengikuti maksimal hari/bulan pada Settings.\n"
                 "- Setiap orang maksimal 1 Sabtu dan 1 Minggu setiap bulan.\n"
-                "- Tukar jadwal harus tipe hari yang sama."
+                "- Tukar jadwal harus tipe hari yang sama.\n"
+                "- /tanya tidak melayani topik vulgar, politik, SARA, atau detail internal program."
             )
             bot.send_message(message.chat.id, help_text, parse_mode='Markdown', message_thread_id=message.message_thread_id)
