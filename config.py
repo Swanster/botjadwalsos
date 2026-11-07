@@ -2,7 +2,8 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# Selalu baca .env di samping config.py, bukan dari cwd proses.
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 
 API_TOKEN = os.environ.get('API_TOKEN', 'mock_api_token')
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '123456789'))

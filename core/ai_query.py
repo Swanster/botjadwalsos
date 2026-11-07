@@ -2,6 +2,7 @@
 
 import logging
 import re
+import time
 from datetime import date, timedelta
 
 import requests
@@ -101,7 +102,7 @@ def llm_answer(question: str, today: date | None = None) -> str:
             {"role": "user", "content": f"KONTEKS:\n{context}\n\nPERTANYAAN: {question}"},
         ],
         "temperature": 0,
-        "max_tokens": 400,
+        "max_tokens": 600,
     }
     data = _post_chat(payload)
     content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
@@ -122,8 +123,13 @@ def answer(question: str, today: date | None = None) -> str:
         return INTERNAL_MSG
     if not (config.AI_BASE_URL and config.AI_API_KEY):
         return answer_question(q, today) if is_schedule_question(q) else AI_UNAVAILABLE_MSG
-    try:
-        return llm_answer(q, today)
-    except Exception:
-        logger.warning("LLM /tanya gagal, memakai fallback", exc_info=True)
-        return answer_question(q, today) if is_schedule_question(q) else AI_UNAVAILABLE_MSG
+    for attempt in range(2):
+        try:
+            return llm_answer(q, today)
+        except Exception as exc:
+            if attempt == 0:
+                logger.warning("LLM /tanya gagal, mencoba ulang sekali: %s", exc)
+                time.sleep(1)
+                continue
+            logger.warning("LLM /tanya gagal (model=%s, base=%s): %s", config.AI_MODEL, config.AI_BASE_URL, exc, exc_info=True)
+    return answer_question(q, today) if is_schedule_question(q) else AI_UNAVAILABLE_MSG
