@@ -7,7 +7,7 @@ from core.database import (
     GROUP_LABELS,
     format_tanggal_indonesia,
     get_all_users_in_group,
-    get_group_quota_status_for_date,
+    get_date_capacity,
     get_jadwal_for_month,
     get_weekend_monthly_limit_key,
 )
@@ -96,37 +96,20 @@ def build_monthly_report(tahun, bulan):
 
     empty_dates = []
     full_dates = []
-    under_quota = []
-    over_quota = []
+    under_capacity = []
+    over_capacity = []
     for day in range(1, days_in_month + 1):
         tanggal = f'{tahun}-{bulan:02d}-{day:02d}'
         if not per_date.get(tanggal):
             empty_dates.append(tanggal)
 
-        quota_status = get_group_quota_status_for_date(tanggal)
-        all_groups_full = True
-        for group_name in GROUP_NAMES:
-            info = quota_status[group_name]
-            if info['current'] < info['limit']:
-                all_groups_full = False
-                under_quota.append({
-                    'tanggal': tanggal,
-                    'group_name': group_name,
-                    'group_label': GROUP_LABELS.get(group_name, group_name),
-                    'current': info['current'],
-                    'limit': info['limit'],
-                })
-            elif info['current'] > info['limit']:
-                over_quota.append({
-                    'tanggal': tanggal,
-                    'group_name': group_name,
-                    'group_label': GROUP_LABELS.get(group_name, group_name),
-                    'current': info['current'],
-                    'limit': info['limit'],
-                })
-
-        if all_groups_full:
+        capacity = get_date_capacity(tanggal)
+        if capacity['is_full']:
             full_dates.append(tanggal)
+        elif capacity['current'] > capacity['limit']:
+            over_capacity.append({'tanggal': tanggal, 'current': capacity['current'], 'limit': capacity['limit']})
+        else:
+            under_capacity.append({'tanggal': tanggal, 'current': capacity['current'], 'limit': capacity['limit']})
 
     users_sorted = sorted(per_user.values(), key=lambda item: (-item['count'], item['group_name'], item['name'].lower()))
     zero_users = [user for user in users_sorted if user['count'] == 0]
@@ -145,9 +128,10 @@ def build_monthly_report(tahun, bulan):
         'total_assignments': len(jadwal_list),
         'empty_dates': empty_dates,
         'full_dates': full_dates,
-        'under_quota_dates_count': len({item['tanggal'] for item in under_quota}),
-        'under_quota': under_quota,
-        'over_quota': over_quota,
+        'under_quota_dates_count': len(under_capacity),
+        'under_capacity_dates_count': len(under_capacity),
+        'under_quota': under_capacity,
+        'over_quota': over_capacity,
         'per_group': [per_group[group_name] for group_name in GROUP_NAMES],
         'per_user': users_sorted,
         'zero_users': zero_users,
@@ -165,8 +149,8 @@ def format_monthly_report_for_telegram(report):
         "",
         f"Total Jadwal: *{report['total_assignments']}*",
         f"Hari Kosong: *{len(report['empty_dates'])}*",
-        f"Hari Kurang Kuota: *{report['under_quota_dates_count']}*",
-        f"Hari Penuh Semua Divisi: *{len(report['full_dates'])}*",
+        f"Hari Belum Penuh: *{report['under_capacity_dates_count']}*",
+        f"Hari Penuh: *{len(report['full_dates'])}*",
         "",
         "📌 *Per Divisi*",
     ]
@@ -194,18 +178,16 @@ def format_monthly_report_for_telegram(report):
     else:
         lines.append("- Tidak ada")
 
-    lines.extend(["", "🗓️ *Tanggal Kurang Kuota*"])
-    if report['under_quota']:
+    lines.extend(["", "🗓️ *Tanggal Belum Penuh*"])
+    if report['under_capacity_dates_count']:
         for item in report['under_quota'][:20]:
             tanggal_obj = datetime.strptime(item['tanggal'], '%Y-%m-%d').date()
             hari = HARI_MAP_ID[tanggal_obj.weekday()]
-            label = item.get('group_label') or item['group_name']
             lines.append(
-                f"- {hari}, {tanggal_obj.day}: {label} "
-                f"{item['current']}/{item['limit']}"
+                f"- {hari}, {tanggal_obj.day}: {item['current']}/{item['limit']}"
             )
-        if len(report['under_quota']) > 20:
-            lines.append(f"- ...dan {len(report['under_quota']) - 20} kekurangan lainnya.")
+        if report['under_capacity_dates_count'] > 20:
+            lines.append(f"- ...dan {report['under_capacity_dates_count'] - 20} tanggal lainnya.")
     else:
         lines.append("- Tidak ada")
 
@@ -213,10 +195,9 @@ def format_monthly_report_for_telegram(report):
         lines.extend(["", "🚨 *Perlu Dicek*"])
         for item in report['over_quota'][:10]:
             tanggal_obj = datetime.strptime(item['tanggal'], '%Y-%m-%d').date()
-            label = item.get('group_label') or item['group_name']
             lines.append(
-                f"- {tanggal_obj.day} {report['nama_bulan']}: {label} "
-                f"{item['current']}/{item['limit']} melebihi kuota"
+                f"- {tanggal_obj.day} {report['nama_bulan']}: "
+                f"{item['current']}/{item['limit']} melebihi kapasitas"
             )
         for user in report['weekend_warnings'][:10]:
             lines.append(

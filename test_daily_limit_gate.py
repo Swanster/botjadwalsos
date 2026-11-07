@@ -55,3 +55,17 @@ def test_third_person_rejected_when_limit_two(tmp_path, monkeypatch):
 
     assert result.ok is False
     assert result.error_code == "date_conflict"
+
+
+def test_monthly_report_full_days_follow_date_capacity(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    from core.monthly_report import build_monthly_report
+
+    for day in range(1, 4):
+        assert db.add_jadwal_manual(1, "Op User", "op_user", f"2026-11-0{day}")
+
+    report = build_monthly_report(2026, 11)
+
+    assert set(report["full_dates"]) == {"2026-11-01", "2026-11-02", "2026-11-03"}
+    assert report["under_capacity_dates_count"] == 27
+    assert all(item["tanggal"] for item in report["under_quota"])
