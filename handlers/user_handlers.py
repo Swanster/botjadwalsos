@@ -10,7 +10,7 @@ import pytz
 import time
 
 from config import ALLOWED_TOPIC_ID
-from handlers.access import deny_private_callback, private_denied
+from handlers.access import deny_private_callback, private_denied, deny_unregistered
 import core.database as db
 from core.database import (
     get_bulan_dibuka, get_bulan_dibuka_list, get_konfigurasi, get_jadwal_for_month,
@@ -33,6 +33,8 @@ SAVE_ERROR_MESSAGES = {
 
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets
 from core.schedule_recap import generate_rekap_text as build_rekap_text
+from core.schedule_query import SCOPE_MSG
+from core.ai_query import answer as ai_answer
 from core.telegram_text import escape_markdown
 
 # Variabel global
@@ -43,10 +45,11 @@ NAMA_BULAN = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 
 HARI_MAP_ID = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'Sabtu', 6: 'Minggu'}
 EMOJI_HARI = {'Senin':'🌞','Selasa':'📘','Rab':'📗','Kamis':'📙','Jumat':'📕','Sabtu':'🎉','Minggu':'🛌'}
 
-def is_allowed(message):
-    """Cek apakah message berasal dari chat yang diizinkan.
+def is_allowed(message, bot=None):
+    """Cek apakah message berasal dari chat yang diizinkan dan user terdaftar.
 
     Chat pribadi: hanya admin (ADMIN_ID). Anggota tim memakai grup/topik.
+    Grup: user harus ada di user_groups; bila belum, bot mengirim penjelasan.
     """
     if private_denied(message.chat.type, message.from_user.id):
         return False
@@ -55,9 +58,9 @@ def is_allowed(message):
     if message.chat.type in ['group', 'supergroup']:
         # Jika ALLOWED_TOPIC_ID tidak di-set (None), izinkan semua group
         # Jika di-set, hanya izinkan topic yang sesuai
-        if ALLOWED_TOPIC_ID is None:
-            return True
-        return message.message_thread_id == ALLOWED_TOPIC_ID
+        if ALLOWED_TOPIC_ID is not None and message.message_thread_id != ALLOWED_TOPIC_ID:
+            return False
+        return not deny_unregistered(bot, message.chat.id, message.from_user.id, message.message_thread_id)
     return False
 
 def get_hari_from_date(date_str: str) -> str:
@@ -459,46 +462,55 @@ def register_user_handlers(bot: telebot.TeleBot):
 
     @bot.message_handler(commands=['menu'])
     def handle_menu(message):
-        if not is_allowed(message): return
+        if not is_allowed(message, bot): return
         send_main_menu(message.chat.id, message.message_thread_id)
 
     @bot.message_handler(commands=['start'])
     def handle_start(message):
-        if not is_allowed(message): return
+        if not is_allowed(message, bot): return
         start_jadwal_flow(message.chat.id, message.from_user, message.message_thread_id)
 
     @bot.message_handler(commands=['jadwal_saya'])
     def handle_jadwal_saya(message):
-        if not is_allowed(message): return
+        if not is_allowed(message, bot): return
         send_jadwal_saya(message.chat.id, message.from_user, message.message_thread_id)
 
     @bot.message_handler(commands=['lihat_jadwal'])
     def handle_lihat_jadwal(message):
-        if not is_allowed(message): return
+        if not is_allowed(message, bot): return
         send_lihat_jadwal(message.chat.id, message.message_thread_id)
+
+    @bot.message_handler(commands=['tanya', 'ask'])
+    def handle_tanya(message):
+        if not is_allowed(message, bot): return
+        pertanyaan = message.text.split(' ', 1)[1] if ' ' in message.text else ''
+        if not pertanyaan.strip():
+            bot.send_message(message.chat.id, SCOPE_MSG, message_thread_id=message.message_thread_id)
+            return
+        bot.send_message(message.chat.id, ai_answer(pertanyaan), message_thread_id=message.message_thread_id)
 
     @bot.message_handler(commands=['cuti'])
     def handle_cuti(message):
-        if not is_allowed(message): return
+        if not is_allowed(message, bot): return
         start_cuti_flow(message.chat.id, message.from_user, message.message_thread_id)
         
     @bot.message_handler(commands=['lihat_cuti'])
     def handle_lihat_cuti(message):
         """Menampilkan daftar pengguna yang sedang cuti di bulan yang sedang dibuka."""
-        if not is_allowed(message):
+        if not is_allowed(message, bot):
             return
         send_lihat_cuti(message.chat.id, message.message_thread_id)
 
     @bot.message_handler(commands=['batal_jadwal'])
     def handle_batal_jadwal(message):
         """Membatalkan semua jadwal standby pengguna di bulan aktif."""
-        if not is_allowed(message):
+        if not is_allowed(message, bot):
             return
         start_batal_jadwal_flow(message.chat.id, message.from_user, message.message_thread_id)
 
     @bot.message_handler(commands=['batal_cuti'])
     def handle_batal_cuti(message):
-        if not is_allowed(message): return
+        if not is_allowed(message, bot): return
         start_batal_cuti_flow(message.chat.id, message.from_user, message.message_thread_id)
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith('menu_'))
@@ -851,7 +863,7 @@ def register_user_handlers(bot: telebot.TeleBot):
 def register_help_handler(bot: telebot.TeleBot):
         @bot.message_handler(commands=['help', 'guide', 'panduan'])
         def handle_help(message):
-            if not is_allowed(message): return
+            if not is_allowed(message, bot): return
             help_text = (
                 "ℹ️ *Panduan Bot Jadwal Standby*\n\n"
                 "Perintah yang bisa digunakan di grup:\n\n"

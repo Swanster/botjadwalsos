@@ -5,7 +5,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from datetime import datetime
 
 from config import GROUP_CHAT_ID, ALLOWED_TOPIC_ID
-from handlers.access import deny_private_callback, private_denied
+from handlers.access import deny_private_callback, private_denied, deny_unregistered
 from core.telegram_text import escape_markdown
 from core.database import (
     get_bulan_dibuka_list, get_user_jadwal_for_month, get_user_by_telegram_username,
@@ -89,6 +89,8 @@ def register_swap_handlers(bot: telebot.TeleBot):
     @bot.message_handler(commands=['tukar_jadwal'])
     def handle_tukar_jadwal(message):
         if private_denied(message.chat.type, message.from_user.id):
+            return
+        if deny_unregistered(bot, message.chat.id, message.from_user.id, message.message_thread_id):
             return
         user_id = message.from_user.id
         thread_id = message.message_thread_id

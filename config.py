@@ -20,3 +20,9 @@ SECRET_KEY = os.environ.get('SECRET_KEY', '')
 GOOGLE_CREDENTIALS_FILE = os.environ.get('GOOGLE_CREDENTIALS_FILE', 'google_credentials.json')
 GOOGLE_SHEET_ID = os.environ.get('GOOGLE_SHEET_ID', '')
 GOOGLE_SHEET_SYNC_ENABLED = os.environ.get('GOOGLE_SHEET_SYNC_ENABLED', 'false').lower() == 'true'
+
+# LLM untuk /tanya (OpenAI-compatible). Kosong = fallback parser deterministik.
+AI_BASE_URL = os.environ.get('AI_BASE_URL', 'http://127.0.0.1:20128/v1').rstrip('/')
+AI_API_KEY = os.environ.get('AI_API_KEY', '')
+AI_MODEL = os.environ.get('AI_MODEL', 'oc/deepseek-v4.1-flash-free')
+AI_TIMEOUT = int(os.environ.get('AI_TIMEOUT', '45'))

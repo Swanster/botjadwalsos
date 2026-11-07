@@ -152,6 +152,7 @@ class BotManager:
             types.BotCommand("menu", "Membuka tombol menu bot"),
             types.BotCommand("start", "Mengisi atau mengedit jadwal standby"),
             types.BotCommand("lihat_jadwal", "Melihat rekap jadwal tim"),
+            types.BotCommand("tanya", "Tanya jadwal SOS (AI)"),
             types.BotCommand("jadwal_saya", "Melihat jadwal standby pribadi"),
             types.BotCommand("cuti", "Menandai tanggal tidak tersedia"),
             types.BotCommand("lihat_cuti", "Melihat daftar cuti tim"),

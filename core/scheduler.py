@@ -21,7 +21,7 @@ from core.database import (
 )
 from core.monthly_report import build_monthly_report, format_monthly_report_for_telegram
 from core.telegram_text import escape_markdown
-from core.schedule_recap import generate_rekap_text
+from core.schedule_recap import generate_rekap_text, SEPARATOR
 
 # Decorator retry_on_failure (TETAP SAMA)
 def retry_on_failure(retries=3, delay=10):
@@ -213,23 +213,25 @@ def build_pesan_peringatan_pengisian_jadwal():
         return None
 
     nama_bulan = format_tanggal_indonesia(start_date).split(' ')[1]
+    total_belum_lengkap = sum(len(entries) for entries in kurang_isi_by_group.values())
     pesan = (
-        "🔔 *Peringatan Pengisian Jadwal SOS*\n\n"
-        f"Periode: *{nama_bulan} {tahun}*\n"
-        "Target: setiap anggota melengkapi jadwal sesuai batas bulanan divisi jika slot masih tersedia.\n\n"
+        "🔔 *PERINGATAN PENGISIAN JADWAL SOS*\n"
+        f"🗓️ *{nama_bulan} {tahun}*\n"
+        f"{SEPARATOR}\n"
+        f"📅 Tanggal belum penuh: *{len(tanggal_kosong)}*\n"
+        f"👥 Anggota belum lengkap: *{total_belum_lengkap}*\n"
     )
 
     if tanggal_kosong:
-        pesan += "📅 *Tanggal yang masih belum terisi penuh:*\n"
+        pesan += "\n📅 *Tanggal belum penuh*\n"
         for tanggal_obj, terisi, limit in tanggal_kosong[:12]:
-            pesan += f"• {format_tanggal_indonesia(tanggal_obj)} — {terisi}/{limit}\n"
+            pesan += f"• *{tanggal_obj.day} {nama_bulan[:3]}* — {terisi}/{limit}\n"
         if len(tanggal_kosong) > 12:
-            pesan += f"• ...dan {len(tanggal_kosong) - 12} tanggal lainnya\n"
-        pesan += "\n"
+            pesan += f"• _...dan {len(tanggal_kosong) - 12} tanggal lainnya_\n"
     else:
-        pesan += "✅ Semua tanggal pada periode ini sudah terisi penuh.\n\n"
+        pesan += "\n✅ *Semua tanggal pada periode ini sudah terisi penuh.*\n"
 
-    pesan += "👥 *Anggota yang jadwalnya belum lengkap:*\n"
+    pesan += "\n👥 *Jadwal anggota belum lengkap*\n"
     has_members = False
     for group_name, entries in kurang_isi_by_group.items():
         if not entries:
@@ -239,20 +241,14 @@ def build_pesan_peringatan_pengisian_jadwal():
         pesan += f"\n*{label}*\n"
         for total, target, user in entries:
             kurang = target - total
-            pesan += f"• {_format_user_mention(user)} — baru *{total}x*, target *{target}x* (kurang *{kurang}x*)\n"
+            pesan += f"• {_format_user_mention(user)} — *{total}x* / target *{target}x* (kurang *{kurang}x*)\n"
 
     if not has_members:
         pesan += "Semua anggota sudah memenuhi target jadwal.\n"
     if tanggal_kosong:
-        pesan += (
-            "\nSilakan anggota yang jadwalnya belum lengkap mengambil tanggal kosong di atas "
-            "melalui `/start`."
-        )
+        pesan += "\n💡 Lengkapi lewat /start selama slot masih tersedia."
     else:
-        pesan += (
-            "\nSaat ini belum ada tanggal kosong di periode aktif. Jika ada slot dibuka lagi, "
-            "anggota di atas menjadi prioritas untuk melengkapi jadwal."
-        )
+        pesan += "\n💡 Belum ada slot kosong. Anggota di atas menjadi prioritas saat slot dibuka."
     return pesan
 
 
