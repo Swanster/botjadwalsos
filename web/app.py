@@ -2,6 +2,7 @@
 
 import os
 import sys
+import time
 from datetime import datetime, date
 from functools import wraps
 import calendar
@@ -35,6 +36,26 @@ from core.monthly_report import build_monthly_report
 # =============================================================================
 # FLASK APP SETUP (Fixed - removed settings dependency, added daily limits validation)
 # =============================================================================
+
+LOGIN_ATTEMPTS = {}          # ip -> (count, first_attempt_ts)
+LOGIN_WINDOW_SECONDS = 300
+LOGIN_MAX_ATTEMPTS = 5
+
+
+def _login_blocked(ip):
+    entry = LOGIN_ATTEMPTS.get(ip)
+    if not entry:
+        return False
+    count, first_ts = entry
+    if time.time() - first_ts > LOGIN_WINDOW_SECONDS:
+        LOGIN_ATTEMPTS.pop(ip, None)
+        return False
+    return count >= LOGIN_MAX_ATTEMPTS
+
+
+def _register_login_failure(ip):
+    count, first_ts = LOGIN_ATTEMPTS.get(ip, (0, time.time()))
+    LOGIN_ATTEMPTS[ip] = (count + 1, first_ts)
 
 def create_app():
     app = Flask(__name__)
@@ -116,15 +137,22 @@ def create_app():
         if request.method == 'POST':
             username = request.form.get('username', '')
             password = request.form.get('password', '')
+            ip = request.remote_addr or 'unknown'
+
+            if _login_blocked(ip):
+                flash('Terlalu banyak percobaan login. Coba lagi dalam 5 menit.', 'error')
+                return render_template('login.html'), 429
 
             admin = verify_admin(username, password)
             if admin:
+                LOGIN_ATTEMPTS.pop(ip, None)
                 user = User(admin['username'], admin.get('role', 'user'))
                 login_user(user)
                 add_audit_log(username, 'LOGIN', 'Berhasil login ke dashboard web')
                 flash('Login berhasil!', 'success')
                 return redirect(url_for('dashboard'))
             else:
+                _register_login_failure(ip)
                 flash('Username atau password salah.', 'error')
 
         return render_template('login.html')

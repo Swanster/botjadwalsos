@@ -60,3 +60,21 @@ def test_default_admin_created_from_env(tmp_path, monkeypatch):
     admins = db.get_all_admin_users()
     assert [admin["username"] for admin in admins] == ["admin"]
     assert db.verify_admin("admin", "ganti-sekarang") is not None
+
+
+def test_login_rate_limited_after_five_failures(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    monkeypatch.setenv("DEFAULT_ADMIN_PASSWORD", "benar-sekali")
+    db.init_default_admin()
+
+    from web import app as web_app
+
+    web_app.LOGIN_ATTEMPTS.clear()
+    client = _client()
+    for _ in range(5):
+        client.post("/login", data={"username": "admin", "password": "salah"})
+
+    body = client.post("/login", data={"username": "admin", "password": "benar-sekali"}).get_data(as_text=True)
+
+    assert "Terlalu banyak percobaan" in body
+    web_app.LOGIN_ATTEMPTS.clear()
