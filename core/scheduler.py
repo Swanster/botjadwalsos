@@ -76,7 +76,7 @@ def kirim_pengingat_harian(bot):
     # Bagian Petugas Standby
     pesan += "✅ *Petugas Standby Hari Ini:*\n"
     if petugas_standby:
-        mentions = [f"[{p['username']}](tg://user?id={p['user_id']})" for p in petugas_standby]
+        mentions = [f"[{_escape_markdown_text(p['username'])}](tg://user?id={p['user_id']})" for p in petugas_standby]
         pesan += ' • ' + '\n • '.join(mentions) + "\n\n"
     else:
         pesan += "_Tidak ada yang standby hari ini._\n\n"
@@ -229,10 +229,14 @@ def _escape_markdown_text(value):
     return str(value or '').replace('\\', '\\\\').replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
 
 
+def _mention_handle(handle):
+    """@handle siap-Markdown: '@' plus handle yang di-escape."""
+    return '@' + _escape_markdown_text(str(handle).lstrip('@'))
+
+
 def _format_user_mention(user):
     if user['telegram_username']:
-        safe_username = str(user['telegram_username']).lstrip('@')
-        return f"@{safe_username}"
+        return _mention_handle(user['telegram_username'])
     safe_name = _escape_markdown_text(user['username']) or 'pengguna'
     return f"[{safe_name}](tg://user?id={user['user_id']})"
 
@@ -360,7 +364,7 @@ def kirim_peringatan_slot_weekend_kosong(bot):
 
     def format_mention(user):
         if user['telegram_username']:
-            return f"@{user['telegram_username']}"
+            return _mention_handle(user['telegram_username'])
         return f"[pengguna](tg://user?id={user['user_id']})"
 
     def get_candidate_priority(user_id, target_date):
@@ -466,7 +470,7 @@ def kirim_peringatan_h_minus_3(bot):
     mentions = []
     for user in all_users:
         if user['telegram_username']:
-            mentions.append(f"@{user['telegram_username']}")
+            mentions.append(_mention_handle(user['telegram_username']))
         else:
             mentions.append(f"[pengguna](tg://user?id={user['user_id']})")
 
