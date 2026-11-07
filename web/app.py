@@ -40,8 +40,10 @@ from config import SECRET_KEY, WEB_HOST, WEB_PORT
 # =============================================================================
 
 LOGIN_ATTEMPTS = {}          # ip -> (count, first_attempt_ts)
+ACCOUNT_ATTEMPTS = {}        # username (lowercase) -> (count, first_attempt_ts)
 LOGIN_WINDOW_SECONDS = 300
 LOGIN_MAX_ATTEMPTS = 5
+MIN_PASSWORD_LENGTH = 8
 
 NAMA_BULAN = {1: 'Januari', 2: 'Februari', 3: 'Maret', 4: 'April', 5: 'Mei', 6: 'Juni',
               7: 'Juli', 8: 'Agustus', 9: 'September', 10: 'Oktober', 11: 'November', 12: 'Desember'}
@@ -76,20 +78,27 @@ def _load_secret_key():
     return key
 
 
-def _login_blocked(ip):
-    entry = LOGIN_ATTEMPTS.get(ip)
+def _prune_attempts(store, now):
+    """Buang entri kedaluwarsa supaya dict tidak tumbuh tanpa batas."""
+    for key, (_, first_ts) in list(store.items()):
+        if now - first_ts > LOGIN_WINDOW_SECONDS:
+            store.pop(key, None)
+
+
+def _attempts_blocked(store, key):
+    now = time.time()
+    _prune_attempts(store, now)
+    entry = store.get(key)
     if not entry:
         return False
-    count, first_ts = entry
-    if time.time() - first_ts > LOGIN_WINDOW_SECONDS:
-        LOGIN_ATTEMPTS.pop(ip, None)
-        return False
-    return count >= LOGIN_MAX_ATTEMPTS
+    return entry[0] >= LOGIN_MAX_ATTEMPTS
 
 
-def _register_login_failure(ip):
-    count, first_ts = LOGIN_ATTEMPTS.get(ip, (0, time.time()))
-    LOGIN_ATTEMPTS[ip] = (count + 1, first_ts)
+def _register_login_failure(store, key):
+    now = time.time()
+    _prune_attempts(store, now)
+    count, first_ts = store.get(key, (0, now))
+    store[key] = (count + 1, first_ts)
 
 def create_app():
     app = Flask(__name__)
@@ -196,26 +205,30 @@ def create_app():
             username = request.form.get('username', '')
             password = request.form.get('password', '')
             ip = request.remote_addr or 'unknown'
+            account_key = username.strip().lower()
 
-            if _login_blocked(ip):
+            if _attempts_blocked(LOGIN_ATTEMPTS, ip) or _attempts_blocked(ACCOUNT_ATTEMPTS, account_key):
                 flash('Terlalu banyak percobaan login. Coba lagi dalam 5 menit.', 'error')
                 return render_template('login.html'), 429
 
             admin = verify_admin(username, password)
             if admin:
                 LOGIN_ATTEMPTS.pop(ip, None)
+                ACCOUNT_ATTEMPTS.pop(account_key, None)
                 user = User(admin['username'], admin.get('role', 'user'))
                 login_user(user)
                 add_audit_log(username, 'LOGIN', 'Berhasil login ke dashboard web')
                 flash('Login berhasil!', 'success')
                 return redirect(url_for('dashboard'))
             else:
-                _register_login_failure(ip)
+                _register_login_failure(LOGIN_ATTEMPTS, ip)
+                if account_key:
+                    _register_login_failure(ACCOUNT_ATTEMPTS, account_key)
                 flash('Username atau password salah.', 'error')
 
         return render_template('login.html')
     
-    @app.route('/logout')
+    @app.route('/logout', methods=['POST'])
     @login_required
     def logout():
         logout_user()
@@ -580,8 +593,8 @@ def create_app():
                 flash('Password baru tidak cocok.', 'error')
                 return redirect(url_for('change_password'))
             
-            if len(new_password) < 6:
-                flash('Password minimal 6 karakter.', 'error')
+            if len(new_password) < MIN_PASSWORD_LENGTH:
+                flash(f'Password minimal {MIN_PASSWORD_LENGTH} karakter.', 'error')
                 return redirect(url_for('change_password'))
             
             # Verify current password
@@ -623,8 +636,8 @@ def create_app():
             flash('Username dan password wajib diisi.', 'error')
             return redirect(url_for('admins'))
         
-        if len(password) < 6:
-            flash('Password minimal 6 karakter.', 'error')
+        if len(password) < MIN_PASSWORD_LENGTH:
+            flash(f'Password minimal {MIN_PASSWORD_LENGTH} karakter.', 'error')
             return redirect(url_for('admins'))
         
         if add_admin_user(username, password, role):
@@ -670,8 +683,8 @@ def create_app():
     def reset_admin_password(admin_id):
         new_password = request.form.get('new_password', '').strip()
         
-        if len(new_password) < 6:
-            flash('Password minimal 6 karakter.', 'error')
+        if len(new_password) < MIN_PASSWORD_LENGTH:
+            flash(f'Password minimal {MIN_PASSWORD_LENGTH} karakter.', 'error')
             return redirect(url_for('admins'))
         
         # Get admin username by id

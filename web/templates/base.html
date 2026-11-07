@@ -219,9 +219,11 @@
                         <span class="text-[9px] text-muted-foreground font-bold uppercase tracking-wider">{{ current_user.role_label }}</span>
                     </div>
                 </div>
-                <a href="{{ url_for('logout') }}" class="flex items-center justify-center w-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] border-2 border-destructive text-destructive rounded-xl hover:bg-destructive hover:text-white transition-all active:scale-95">
-                    Selesaikan Sesi
-                </a>
+                <form method="post" action="{{ url_for('logout') }}">
+                    <button type="submit" class="flex items-center justify-center w-full px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] border-2 border-destructive text-destructive rounded-xl hover:bg-destructive hover:text-white transition-all active:scale-95">
+                        Selesaikan Sesi
+                    </button>
+                </form>
             </div>
         </aside>
 

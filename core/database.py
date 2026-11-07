@@ -879,11 +879,29 @@ def can_add_user_to_group_quota(user_id, tanggal):
 # ADMIN USER FUNCTIONS (untuk web dashboard login)
 # =============================================================================
 
+BCRYPT_MAX_BYTES = 72
+_DUMMY_PASSWORD_HASH = None
+
+
+def _password_bytes(password):
+    """bcrypt hanya memakai 72 byte pertama dan menolak input yang lebih panjang."""
+    return str(password or '').encode('utf-8')[:BCRYPT_MAX_BYTES]
+
+
+def _dummy_bcrypt_check(password):
+    """Samakan waktu respons saat username tidak ada, supaya username tak bisa dienumerasi."""
+    global _DUMMY_PASSWORD_HASH
+    import bcrypt
+    if _DUMMY_PASSWORD_HASH is None:
+        _DUMMY_PASSWORD_HASH = bcrypt.hashpw(b'placeholder', bcrypt.gensalt())
+    bcrypt.checkpw(_password_bytes(password), _DUMMY_PASSWORD_HASH)
+
+
 def add_admin_user(username, password, role='admin'):
     """Menambahkan user dashboard baru dengan password ter-hash dan role."""
     import bcrypt
     role = normalize_admin_role(role)
-    password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    password_hash = bcrypt.hashpw(_password_bytes(password), bcrypt.gensalt()).decode('utf-8')
     created_at = datetime.now(pytz.timezone("Asia/Makassar")).strftime('%Y-%m-%d %H:%M:%S')
     try:
         with connect_db() as conn:
@@ -904,9 +922,13 @@ def verify_admin(username, password):
         cur = conn.cursor()
         cur.execute("SELECT * FROM admin_users WHERE username = ?", (username,))
         admin = cur.fetchone()
-        if admin and bcrypt.checkpw(password.encode('utf-8'), admin['password_hash'].encode('utf-8')):
-            return row_to_dict(admin)
-        return None
+        if admin:
+            if bcrypt.checkpw(_password_bytes(password), admin['password_hash'].encode('utf-8')):
+                return row_to_dict(admin)
+            return None
+
+    _dummy_bcrypt_check(password)
+    return None
 
 def get_admin_by_username(username):
     """Mengambil data admin berdasarkan username."""
@@ -919,7 +941,7 @@ def get_admin_by_username(username):
 def update_admin_password(username, new_password):
     """Memperbarui password admin."""
     import bcrypt
-    password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    password_hash = bcrypt.hashpw(_password_bytes(new_password), bcrypt.gensalt()).decode('utf-8')
     with connect_db() as conn:
         cur = conn.cursor()
         cur.execute("UPDATE admin_users SET password_hash = ? WHERE username = ?", (password_hash, username))

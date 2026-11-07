@@ -28,6 +28,11 @@ def _setup(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_NAME", db_path)
     monkeypatch.setenv("DEFAULT_ADMIN_PASSWORD", "rahasia123")
 
+    from web import app as web_app
+
+    web_app.LOGIN_ATTEMPTS.clear()
+    web_app.ACCOUNT_ATTEMPTS.clear()
+
     db.create_tables()
     db.set_user_group(MEMBER_ID, MEMBER_NAME, MEMBER_TG, "APPS")
     db.add_jadwal_manual(MEMBER_ID, MEMBER_NAME, MEMBER_TG, "2026-11-10")

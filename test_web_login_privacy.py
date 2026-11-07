@@ -69,6 +69,7 @@ def test_login_rate_limited_after_five_failures(tmp_path, monkeypatch):
     from web import app as web_app
 
     web_app.LOGIN_ATTEMPTS.clear()
+    web_app.ACCOUNT_ATTEMPTS.clear()
     client = _client()
     for _ in range(5):
         client.post("/login", data={"username": "admin", "password": "salah"})
@@ -77,6 +78,7 @@ def test_login_rate_limited_after_five_failures(tmp_path, monkeypatch):
 
     assert "Terlalu banyak percobaan" in body
     web_app.LOGIN_ATTEMPTS.clear()
+    web_app.ACCOUNT_ATTEMPTS.clear()
 
 
 def test_secret_key_is_stable_across_restarts(tmp_path, monkeypatch):
