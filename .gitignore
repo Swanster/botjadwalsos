@@ -18,7 +18,6 @@ log_*.txt
 # Credentials and secrets
 credentials.json
 token.json
-config.py
 google_credentials.json
 .env
 .env.*
