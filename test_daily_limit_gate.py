@@ -104,3 +104,12 @@ def test_add_jadwal_manual_runs_one_atomic_mutation(tmp_path, monkeypatch):
     assert calls["n"] == 1, "cek kuota dan insert harus dalam satu transaksi"
     assert db.add_jadwal_manual(1, "Op User", "op_user", "2026-11-10") is False
     assert len(db.get_jadwal_for_specific_date("2026-11-10")) == 1
+
+
+def test_absensi_range_includes_user_id(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    db.set_user_absensi(1, ["2026-11-10"], 2026, 11)
+
+    rows = db.get_all_absensi_in_range("2026-11-01", "2026-11-30")
+
+    assert rows and rows[0]["user_id"] == 1

@@ -16,7 +16,7 @@ from core.database import (
     get_user_absensi_in_range, set_user_absensi, update_user_jadwal_for_month,
     format_tanggal_indonesia, get_user_jadwal_for_month, get_jadwal_for_specific_date,
     get_user_group, get_all_users_in_group, get_all_absensi_in_range,
-    delete_user_jadwal_on_dates, get_setting,
+    delete_user_jadwal_on_dates,
     get_weekend_monthly_limit_key,
     validate_weekday_weekend_balance, validate_weekend_monthly_limits,
     is_weekend_fallback_active_for_user, today_wita
@@ -690,17 +690,14 @@ def register_user_handlers(bot: telebot.TeleBot):
                         bot.answer_callback_query(call.id, "❌ Tanggal ini sudah penuh. Silakan pilih tanggal lain.", show_alert=True)
                         return
 
-                    max_hari_keys = {
-                        'INFRA_DELIVERY': (None, '1', 'Infra Delivery'),
-                        'INFRA_OPERATION': ('max_hari_infra_operation', '5', 'Infra Operation'),
-                        'APPS': ('max_hari_apps', '31', 'APPS'),
-                        'MONITORING': ('max_hari_monitoring', '31', 'MONITORING'),
+                    max_hari = db.get_monthly_cap_for_group(user_group)
+                    pilihan_bulan_ini = {
+                        s for s in selections
+                        if datetime.strptime(s, '%Y-%m-%d').year == dt_obj_toggle.year
+                        and datetime.strptime(s, '%Y-%m-%d').month == dt_obj_toggle.month
                     }
-                    max_hari_key, max_hari_default, group_label = max_hari_keys.get(user_group, ('max_hari_apps', '31', 'APPS'))
-                    max_hari = int(max_hari_default if max_hari_key is None else get_setting(max_hari_key, max_hari_default))
-                    pilihan_bulan_ini = {s for s in selections if datetime.strptime(s, '%Y-%m-%d').month == dt_obj_toggle.month}
                     if len(pilihan_bulan_ini) >= max_hari:
-                        bot.answer_callback_query(call.id, f"❌ Kuota maksimal {max_hari} hari/bulan untuk tim {group_label} telah tercapai.", show_alert=True)
+                        bot.answer_callback_query(call.id, f"❌ Kuota maksimal {max_hari} hari/bulan untuk tim Anda telah tercapai.", show_alert=True)
                         return
 
                 if date_str in selections: selections.remove(date_str)
@@ -740,19 +737,26 @@ def register_user_handlers(bot: telebot.TeleBot):
                         return
                     pesan = f"✅ Jadwal Anda untuk bulan {NAMA_BULAN[month]} {year} telah disimpan."
                     user_group = get_user_group(user_id)
-                    for tanggal in pilihan_final:
-                        sync_jadwal_to_sheets(tanggal=tanggal, hari=get_hari_from_date(tanggal), username=call.from_user.username or call.from_user.first_name, group=user_group or 'UNKNOWN')
+                    try:
+                        for tanggal in pilihan_final:
+                            sync_jadwal_to_sheets(tanggal=tanggal, hari=get_hari_from_date(tanggal), username=call.from_user.username or call.from_user.first_name, group=user_group or 'UNKNOWN')
+                    except Exception as exc:
+                        # Sheets tidak boleh membatalkan konfirmasi simpan yang sudah commit.
+                        print(f"Sinkronisasi Sheets jadwal dilewati: {exc}")
                 else: # cuti
                     set_user_absensi(user_id, pilihan_final, year, month) # Modifikasi kecil agar lebih aman
                     pesan = f"✅ Data cuti Anda untuk bulan {NAMA_BULAN[month]} {year} telah diperbarui."
                     
                     # Sync ke Google Sheets untuk setiap tanggal cuti
-                    for tanggal in pilihan_final:
-                        sync_absensi_to_sheets(
-                            tanggal=tanggal,
-                            username=call.from_user.username or call.from_user.first_name,
-                            user_id=user_id
-                        )
+                    try:
+                        for tanggal in pilihan_final:
+                            sync_absensi_to_sheets(
+                                tanggal=tanggal,
+                                username=call.from_user.username or call.from_user.first_name,
+                                user_id=user_id
+                            )
+                    except Exception as exc:
+                        print(f"Sinkronisasi Sheets cuti dilewati: {exc}")
                 if user_id in selection_dict: del selection_dict[user_id]
                 try: bot.delete_message(call.message.chat.id, call.message.message_id)
                 except ApiTelegramException: pass

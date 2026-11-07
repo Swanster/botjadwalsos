@@ -190,3 +190,23 @@ def test_tukar_jadwal_uses_chosen_open_month(tmp_path, monkeypatch):
 
     swap_dates = _calendar_dates(bot.sent[-1]["markup"], "swap_selectA_2026-12-")
     assert swap_dates == ["swap_selectA_2026-12-05"]
+
+
+def test_save_confirmation_survives_sheets_failure(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    db.buka_bulan_baru(2026, 11)
+    bot = _register()
+
+    def boom(**kwargs):
+        raise RuntimeError("sheets down")
+
+    monkeypatch.setattr(user_handlers, "sync_jadwal_to_sheets", boom)
+
+    bot.handlers["start"](message(500, "/start"))
+    weekday = _calendar_dates(bot.sent[-1]["markup"], "jadwal_toggle_2026-11-")[0]
+    bot.fire(weekday, 500)
+    bot.fire("jadwal_save_2026_11", 500)
+
+    saved = [row["tanggal"] for row in db.get_user_jadwal_for_month(500, 2026, 11)]
+    assert saved == [weekday.replace("jadwal_toggle_", "")]
+    assert any("telah disimpan" in (sent["text"] or "") for sent in bot.sent)

@@ -629,6 +629,7 @@ def get_all_absensi_in_range(start_date, end_date):
     query = """
         SELECT
             a.tanggal_absen AS tanggal,
+            a.user_id AS user_id,
             ug.username
         FROM absensi a
         LEFT JOIN user_groups ug ON a.user_id = ug.user_id
@@ -775,6 +776,13 @@ def _get_monthly_limit_with_conn(conn, group_name):
 def get_monthly_limit_for_group(group_name):
     with connect_db() as conn:
         return _get_monthly_limit_with_conn(conn, group_name)
+
+
+def get_monthly_cap_for_group(group_name):
+    """Batas jumlah tanggal per bulan untuk satu divisi (sama dengan gate simpan)."""
+    with connect_db() as conn:
+        canonical = normalize_group_name(group_name)
+        return 1 if canonical == 'INFRA_DELIVERY' else _get_monthly_limit_with_conn(conn, canonical)
 
 WEEKEND_MONTHLY_SLOTS = 2  # 1 Sabtu + 1 Minggu per bulan (validate_weekend_monthly_limits)
 

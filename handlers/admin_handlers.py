@@ -4,6 +4,7 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import io
 import csv
+import time
 from datetime import date, datetime
 from collections import defaultdict
 
@@ -55,9 +56,19 @@ def register_admin_handlers(bot: telebot.TeleBot):
             try:
                 bot.send_message(user['user_id'], pesan, parse_mode='Markdown')
                 success_count += 1
-            except Exception:
+            except Exception as exc:
+                if '429' in str(exc):
+                    # Rate limit Telegram: tunggu lalu coba sekali lagi sebelum menyerah.
+                    time.sleep(1)
+                    try:
+                        bot.send_message(user['user_id'], pesan, parse_mode='Markdown')
+                        success_count += 1
+                        continue
+                    except Exception:
+                        pass
                 username = user.get('telegram_username') or str(user['user_id'])
                 failed_users.append(username)
+            time.sleep(0.05)
 
         return success_count, failed_users
     

@@ -797,7 +797,7 @@ def create_app():
                 all_absensi.append({
                     'tanggal': a['tanggal'],
                     'username': a.get('username', 'Unknown'),
-                    'user_id': 0,  # Tidak tersedia di data absensi
+                    'user_id': a['user_id'],
                     'recorded_at': ''
                 })
 
