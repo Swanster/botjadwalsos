@@ -33,7 +33,6 @@ def _setup(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_NAME", db_path)
     monkeypatch.setattr(db, "DB_NAME", db_path)
     db.create_tables()
-    db.init_default_settings()
     monkeypatch.setattr(user_handlers, "sync_jadwal_to_sheets", lambda **kwargs: None)
     monkeypatch.setattr(user_handlers, "sync_absensi_to_sheets", lambda **kwargs: None)
     db.set_user_group(500, "Apps User", "apps_user", "APPS")

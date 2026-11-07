@@ -20,7 +20,6 @@ def _setup(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_NAME", db_path)
     monkeypatch.setattr(db, "DB_NAME", db_path)
     db.create_tables()
-    db.init_default_settings()
     db.set_user_group(1, "Op User", "op_user_x", "INFRA_OPERATION")
     db.buka_bulan_baru(2026, 11)
     return db_path

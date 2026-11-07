@@ -743,13 +743,6 @@ def get_all_settings():
         cur.execute("SELECT key, value, description FROM settings")
         return {row['key']: {'value': row['value'], 'description': row['description']} for row in cur.fetchall()}
 
-def init_default_settings():
-    """Idempotent public wrapper for canonical settings initialization."""
-    with connect_db() as conn:
-        _init_default_settings(conn.cursor())
-        conn.commit()
-    print("🔧 Default settings berhasil diinisialisasi.")
-
 def _get_group_quota_with_conn(conn, group_name):
     """Mengambil kuota harian untuk divisi tertentu menggunakan connection aktif."""
     canonical = normalize_group_name(group_name)
@@ -912,14 +905,6 @@ def get_admin_by_username(username):
     with connect_db() as conn:
         cur = conn.cursor()
         cur.execute("SELECT id, username, role, created_at FROM admin_users WHERE username = ?", (username,))
-        result = cur.fetchone()
-        return row_to_dict(result) if result else None
-
-def get_admin_by_id(admin_id):
-    """Mengambil data admin berdasarkan ID."""
-    with connect_db() as conn:
-        cur = conn.cursor()
-        cur.execute("SELECT id, username, role, created_at FROM admin_users WHERE id = ?", (admin_id,))
         result = cur.fetchone()
         return row_to_dict(result) if result else None
 

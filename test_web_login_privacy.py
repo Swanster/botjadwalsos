@@ -19,7 +19,6 @@ def _setup(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DB_NAME", db_path)
     monkeypatch.setattr(db, "DB_NAME", db_path)
     db.create_tables()
-    db.init_default_settings()
     db.set_user_group(777, "Rahasia", "rahasia_user", "APPS")
     db.add_jadwal_manual(777, "Rahasia", "rahasia_user", "2026-11-10")
     return db_path
