@@ -35,6 +35,7 @@ from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets
 from core.schedule_recap import generate_rekap_text as build_rekap_text
 from core.ai_query import answer as ai_answer, ASK_HELP_MSG
 from core.schedule_agent import is_fill_request, build_fill_plan, store_pending, format_plan, is_help_question, get_help_text, is_replace_request
+from core.intent import classify_intent
 from core.telegram_text import escape_markdown
 
 # Variabel global
@@ -529,11 +530,12 @@ def register_user_handlers(bot: telebot.TeleBot):
         if not pertanyaan.strip():
             bot.send_message(message.chat.id, ASK_HELP_MSG, message_thread_id=message.message_thread_id)
             return
-        if is_help_question(pertanyaan):
+        intent = classify_intent(pertanyaan)
+        if intent == "help":
             bot.send_message(message.chat.id, get_help_text(), parse_mode='Markdown', message_thread_id=message.message_thread_id)
             return
-        if is_fill_request(pertanyaan):
-            mode = "replace" if is_replace_request(pertanyaan) else "add"
+        if intent in ("fill", "replace") and is_fill_request(pertanyaan):
+            mode = "replace" if intent == "replace" else "add"
             plan = build_fill_plan(pertanyaan, message.from_user.id, message.from_user.first_name, message.from_user.username, mode)
             if isinstance(plan, str):
                 bot.send_message(message.chat.id, plan, message_thread_id=message.message_thread_id)
@@ -552,6 +554,15 @@ def register_user_handlers(bot: telebot.TeleBot):
                 reply_markup=markup if plan.get("available_new") else None,
                 message_thread_id=message.message_thread_id,
             )
+            return
+        if intent == "cancel":
+            bot.send_message(message.chat.id, "Gunakan `/batal_jadwal` atau `/batal_cuti` untuk membatalkan jadwal/cuti.", parse_mode='Markdown', message_thread_id=message.message_thread_id)
+            return
+        if intent == "leave":
+            bot.send_message(message.chat.id, "Gunakan `/cuti` untuk menandai tanggal tidak tersedia.", parse_mode='Markdown', message_thread_id=message.message_thread_id)
+            return
+        if intent == "swap":
+            bot.send_message(message.chat.id, "Gunakan `/tukar_jadwal` untuk mengajukan pertukaran jadwal.", parse_mode='Markdown', message_thread_id=message.message_thread_id)
             return
         bot.send_message(message.chat.id, ai_answer(pertanyaan), message_thread_id=message.message_thread_id)
 
