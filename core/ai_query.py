@@ -11,6 +11,7 @@ import requests
 import config
 from core.database import format_tanggal_indonesia, get_jadwal_for_specific_date, today_wita
 from core.schedule_query import HARI_MAP_ID, answer_question, is_schedule_question
+from core.schedule_context import build_rich_context
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,7 @@ def _post_chat(payload: dict) -> dict:
 
 
 def llm_answer(question: str, today: date | None = None) -> str:
-    context = build_context(today) if is_schedule_question(question) else "Tidak ada konteks jadwal yang diperlukan untuk pertanyaan ini."
+    context = build_rich_context(today) if is_schedule_question(question) else "Tidak ada konteks jadwal yang diperlukan untuk pertanyaan ini."
     payload = {
         "model": config.AI_MODEL,
         "messages": [
