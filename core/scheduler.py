@@ -22,6 +22,7 @@ from core.database import (
 from core.monthly_report import build_monthly_report, format_monthly_report_for_telegram
 from core.telegram_text import escape_markdown
 from core.schedule_recap import generate_rekap_text, SEPARATOR
+from core.reminders import schedule_daily_reminder
 
 # Decorator retry_on_failure (TETAP SAMA)
 def retry_on_failure(retries=3, delay=10):
@@ -503,6 +504,12 @@ def init_scheduler(bot):
     scheduler.add_job(
         lambda: kirim_jadwal_bulanan_awal_bulan(bot), trigger='cron',
         day=1, hour=7, minute=10, id='monthly_schedule_recap_first_day', replace_existing=True
+    )
+    
+    # Job 8: Reminder harian jadwal kosong (proaktif) - Setiap hari jam 09:00
+    scheduler.add_job(
+        lambda: schedule_daily_reminder(bot), trigger='cron',
+        hour=9, minute=0, id='daily_empty_schedule_reminder', replace_existing=True
     )
     
     scheduler.start()
