@@ -34,6 +34,7 @@ SAVE_ERROR_MESSAGES = {
 from core.google_sheets import sync_jadwal_to_sheets, sync_absensi_to_sheets
 from core.schedule_recap import generate_rekap_text as build_rekap_text
 from core.ai_query import answer as ai_answer, ASK_HELP_MSG
+from core.schedule_agent import is_fill_request, build_fill_plan, store_pending, format_plan, is_help_question, get_help_text, is_replace_request
 from core.telegram_text import escape_markdown
 
 # Variabel global
@@ -247,6 +248,10 @@ def register_user_handlers(bot: telebot.TeleBot):
             InlineKeyboardButton("Batal Jadwal", callback_data="menu_batal_jadwal"),
             InlineKeyboardButton("Batal Cuti", callback_data="menu_batal_cuti")
         )
+        markup.row(
+            InlineKeyboardButton("Tambah Jadwal", callback_data="menu_tambah_jadwal"),
+            InlineKeyboardButton("Ganti Jadwal", callback_data="menu_ganti_jadwal")
+        )
         markup.row(InlineKeyboardButton("Panduan", callback_data="menu_panduan"))
         bot.send_message(chat_id, "Silakan pilih menu:", reply_markup=markup, message_thread_id=thread_id)
 
@@ -447,6 +452,8 @@ def register_user_handlers(bot: telebot.TeleBot):
             "*/cuti* - Menandai tanggal Anda tidak bersedia (cuti).\n"
             "*/lihat_cuti* - Menampilkan daftar cuti tim di bulan aktif.\n"
             "*/tanya <pertanyaan>* - Tanya bot (AI): jadwal atau pertanyaan umum aman.\n"
+            "*/tambah_jadwal 4, 5, 10* - Menambah tanggal ke jadwal Anda.\n"
+            "*/ganti_jadwal 4, 5, 10* - Mengganti jadwal bulan aktif.\n"
             "*/tukar_jadwal* - Mengajukan pertukaran jadwal.\n"
             "*/batal_jadwal* - Membatalkan jadwal standby yang sudah ada.\n"
             "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"
@@ -481,12 +488,70 @@ def register_user_handlers(bot: telebot.TeleBot):
         if not is_allowed(message, bot): return
         send_lihat_jadwal(message.chat.id, message.message_thread_id)
 
+    def _process_fill_command(message, mode):
+        if not is_allowed(message, bot):
+            return
+        args = message.text.split(' ', 1)[1] if ' ' in message.text else ''
+        usage = "/tambah_jadwal 4, 5, 10" if mode == "add" else "/ganti_jadwal 4, 5, 10"
+        if not args.strip():
+            bot.send_message(message.chat.id, f"Gunakan: {usage}", message_thread_id=message.message_thread_id)
+            return
+        plan = build_fill_plan(args, message.from_user.id, message.from_user.first_name, message.from_user.username, mode)
+        if isinstance(plan, str):
+            bot.send_message(message.chat.id, plan, message_thread_id=message.message_thread_id)
+            return
+        store_pending(message.from_user.id, plan)
+        markup = InlineKeyboardMarkup()
+        if plan.get("available_new"):
+            markup.row(
+                InlineKeyboardButton("✅ Ya, simpan", callback_data="agent_fill_confirm"),
+                InlineKeyboardButton("❌ Batal", callback_data="agent_fill_cancel"),
+            )
+        bot.send_message(
+            message.chat.id,
+            format_plan(plan),
+            parse_mode='Markdown',
+            reply_markup=markup if plan.get("available_new") else None,
+            message_thread_id=message.message_thread_id,
+        )
+
+    @bot.message_handler(commands=['tambah_jadwal', 'input_jadwal', 'isi_jadwal'])
+    def handle_tambah_jadwal(message):
+        _process_fill_command(message, "add")
+
+    @bot.message_handler(commands=['ganti_jadwal', 'ubah_jadwal'])
+    def handle_ganti_jadwal(message):
+        _process_fill_command(message, "replace")
     @bot.message_handler(commands=['tanya', 'ask'])
     def handle_tanya(message):
         if not is_allowed(message, bot): return
         pertanyaan = message.text.split(' ', 1)[1] if ' ' in message.text else ''
         if not pertanyaan.strip():
             bot.send_message(message.chat.id, ASK_HELP_MSG, message_thread_id=message.message_thread_id)
+            return
+        if is_help_question(pertanyaan):
+            bot.send_message(message.chat.id, get_help_text(), parse_mode='Markdown', message_thread_id=message.message_thread_id)
+            return
+        if is_fill_request(pertanyaan):
+            mode = "replace" if is_replace_request(pertanyaan) else "add"
+            plan = build_fill_plan(pertanyaan, message.from_user.id, message.from_user.first_name, message.from_user.username, mode)
+            if isinstance(plan, str):
+                bot.send_message(message.chat.id, plan, message_thread_id=message.message_thread_id)
+                return
+            store_pending(message.from_user.id, plan)
+            markup = InlineKeyboardMarkup()
+            if plan.get("available_new"):
+                markup.row(
+                    InlineKeyboardButton("✅ Ya, simpan", callback_data="agent_fill_confirm"),
+                    InlineKeyboardButton("❌ Batal", callback_data="agent_fill_cancel"),
+                )
+            bot.send_message(
+                message.chat.id,
+                format_plan(plan),
+                parse_mode='Markdown',
+                reply_markup=markup if plan.get("available_new") else None,
+                message_thread_id=message.message_thread_id,
+            )
             return
         bot.send_message(message.chat.id, ai_answer(pertanyaan), message_thread_id=message.message_thread_id)
 
@@ -537,6 +602,10 @@ def register_user_handlers(bot: telebot.TeleBot):
             start_batal_cuti_flow(call.message.chat.id, call.from_user, thread_id)
         elif action == 'tukar_jadwal':
             bot.send_message(call.message.chat.id, "Untuk tukar jadwal, gunakan perintah `/tukar_jadwal` lalu pilih jadwal dan mention rekan yang ingin diajak tukar.", parse_mode='Markdown', message_thread_id=thread_id)
+        elif action == 'tambah_jadwal':
+            bot.send_message(call.message.chat.id, "Gunakan `/tambah_jadwal 4, 5, 10` untuk menambah tanggal ke jadwal Anda.", parse_mode='Markdown', message_thread_id=thread_id)
+        elif action == 'ganti_jadwal':
+            bot.send_message(call.message.chat.id, "Gunakan `/ganti_jadwal 4, 5, 10` untuk mengganti seluruh jadwal bulan aktif.", parse_mode='Markdown', message_thread_id=thread_id)
         elif action == 'panduan':
             send_guide(call.message.chat.id, thread_id)
 
@@ -875,6 +944,8 @@ def register_help_handler(bot: telebot.TeleBot):
                 "*/cuti* - Menandai tanggal Anda tidak bersedia (cuti).\n"
                 "*/lihat_cuti* - Menampilkan daftar cuti tim di bulan aktif.\n"
                 "*/tanya <pertanyaan>* - Tanya bot (AI): jadwal atau pertanyaan umum aman.\n"
+                "*/tambah_jadwal 4, 5, 10* - Menambah tanggal ke jadwal Anda.\n"
+                "*/ganti_jadwal 4, 5, 10* - Mengganti jadwal bulan aktif.\n"
                 "*/tukar_jadwal* - Mengajukan pertukaran jadwal.\n"
                 "*/batal_jadwal* - Membatalkan jadwal standby yang sudah ada.\n"
                 "*/batal_cuti* - Membatalkan data cuti yang sudah ada.\n"

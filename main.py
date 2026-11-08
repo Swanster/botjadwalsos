@@ -22,6 +22,7 @@ from core.scheduler import init_scheduler
 from handlers.admin_handlers import register_admin_handlers
 from handlers.user_handlers import register_user_handlers, register_help_handler
 from handlers.swap_handler import register_swap_handlers
+from handlers.agent_handler import register_agent_handlers
 
 BOT_URL_TOKEN = re.compile(r'/bot[^/\s\'"]+')
 
@@ -128,6 +129,7 @@ class BotManager:
             register_admin_handlers(self.bot)
             register_user_handlers(self.bot)
             register_swap_handlers(self.bot)
+            register_agent_handlers(self.bot)
             register_help_handler(self.bot)
             logging.info("✓ Handlers terdaftar")
             
@@ -152,6 +154,8 @@ class BotManager:
             types.BotCommand("menu", "Membuka tombol menu bot"),
             types.BotCommand("start", "Mengisi atau mengedit jadwal standby"),
             types.BotCommand("lihat_jadwal", "Melihat rekap jadwal tim"),
+            types.BotCommand("tambah_jadwal", "Menambah tanggal jadwal (contoh: 4, 5, 10)"),
+            types.BotCommand("ganti_jadwal", "Mengganti jadwal bulan aktif"),
             types.BotCommand("tanya", "Tanya bot (AI)"),
             types.BotCommand("jadwal_saya", "Melihat jadwal standby pribadi"),
             types.BotCommand("cuti", "Menandai tanggal tidak tersedia"),

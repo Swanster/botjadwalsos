@@ -29,7 +29,7 @@ class MutationResult:
     message: str | None = None
     rows_affected: int = 0
 
-def _run_mutation_with_retry(operation):
+def _run_mutation_with_retry(operation) -> MutationResult:
     for attempt in range(MUTATION_MAX_ATTEMPTS):
         with connect_db() as conn:
             conn.execute(f'PRAGMA busy_timeout = {MUTATION_BUSY_TIMEOUT_MS}')
@@ -48,6 +48,7 @@ def _run_mutation_with_retry(operation):
                 if attempt == MUTATION_MAX_ATTEMPTS - 1:
                     return MutationResult(False, 'database_locked', LOCK_RETRY_MESSAGE)
         time.sleep(MUTATION_RETRY_DELAYS[attempt])
+    return MutationResult(False, 'database_locked', LOCK_RETRY_MESSAGE)
 
 GROUP_NAMES = (
     'INFRA_DELIVERY',
