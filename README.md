@@ -41,9 +41,24 @@ Anggota: `/start`, `/menu`, `/jadwal_saya`, `/lihat_jadwal`, `/cuti`,
 `/lihat_cuti`, `/batal_jadwal`, `/batal_cuti`, `/tukar_jadwal`,
 `/tanya <pertanyaan>` (tanya bot AI), `/panduan`.
 
+`/tanya` juga bisa dipakai untuk aksi cepat, contoh:
+- `tolong input jadwal saya tanggal 4, 5, dan 10`
+- `ganti jadwal saya tanggal 4, 5`
+- `batal jadwal saya tanggal 4`
+- `cuti tanggal 4`
+
 Admin (private chat): `/buka_jadwal_bulan [bulan tahun]`,
-`/tutup_jadwal_bulan <bulan> <tahun>`, `/statistik`, `/upload_grup_csv`,
-`/export`.
+`/tutup_jadwal_bulan <bulan> <tahun>`, `/statistik`, `/ringkasan_kuota`,
+`/tanggal_penuh`, `/upload_grup_csv`, `/export`.
+
+## Reminder
+
+Reminder harian jadwal kosong aktif setiap 09:00 WITA. Matikan dengan env:
+
+```bash
+REMINDER_ENABLED=0
+```
+
 
 ## Aturan jadwal
 

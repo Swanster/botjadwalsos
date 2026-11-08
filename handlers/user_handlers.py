@@ -489,15 +489,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         if not is_allowed(message, bot): return
         send_lihat_jadwal(message.chat.id, message.message_thread_id)
 
-    def _process_fill_command(message, mode):
-        if not is_allowed(message, bot):
-            return
-        args = message.text.split(' ', 1)[1] if ' ' in message.text else ''
-        usage = "/tambah_jadwal 4, 5, 10" if mode == "add" else "/ganti_jadwal 4, 5, 10"
-        if not args.strip():
-            bot.send_message(message.chat.id, f"Gunakan: {usage}", message_thread_id=message.message_thread_id)
-            return
-        plan = build_fill_plan(args, message.from_user.id, message.from_user.first_name, message.from_user.username, mode)
+    def _send_action_plan(message, plan):
         if isinstance(plan, str):
             bot.send_message(message.chat.id, plan, message_thread_id=message.message_thread_id)
             return
@@ -515,6 +507,17 @@ def register_user_handlers(bot: telebot.TeleBot):
             reply_markup=markup if plan.get("available_new") else None,
             message_thread_id=message.message_thread_id,
         )
+
+    def _process_fill_command(message, mode):
+        if not is_allowed(message, bot):
+            return
+        args = message.text.split(' ', 1)[1] if ' ' in message.text else ''
+        usage = "/tambah_jadwal 4, 5, 10" if mode == "add" else "/ganti_jadwal 4, 5, 10"
+        if not args.strip():
+            bot.send_message(message.chat.id, f"Gunakan: {usage}", message_thread_id=message.message_thread_id)
+            return
+        plan = build_fill_plan(args, message.from_user.id, message.from_user.first_name, message.from_user.username, mode)
+        _send_action_plan(message, plan)
 
     @bot.message_handler(commands=['tambah_jadwal', 'input_jadwal', 'isi_jadwal'])
     def handle_tambah_jadwal(message):
@@ -537,64 +540,16 @@ def register_user_handlers(bot: telebot.TeleBot):
         if intent in ("fill", "replace") and is_fill_request(pertanyaan):
             mode = "replace" if intent == "replace" else "add"
             plan = build_fill_plan(pertanyaan, message.from_user.id, message.from_user.first_name, message.from_user.username, mode)
-            if isinstance(plan, str):
-                bot.send_message(message.chat.id, plan, message_thread_id=message.message_thread_id)
-                return
-            store_pending(message.from_user.id, plan)
-            markup = InlineKeyboardMarkup()
-            if plan.get("available_new"):
-                markup.row(
-                    InlineKeyboardButton("✅ Ya, simpan", callback_data="agent_fill_confirm"),
-                    InlineKeyboardButton("❌ Batal", callback_data="agent_fill_cancel"),
-                )
-            bot.send_message(
-                message.chat.id,
-                format_plan(plan),
-                parse_mode='Markdown',
-                reply_markup=markup if plan.get("available_new") else None,
-                message_thread_id=message.message_thread_id,
-            )
+            _send_action_plan(message, plan)
             return
         if intent == "cancel" and is_cancel_request(pertanyaan):
             mode = "cancel_cuti" if "cuti" in pertanyaan.lower() else "cancel_jadwal"
             plan = build_action_plan(pertanyaan, message.from_user.id, message.from_user.first_name, message.from_user.username, mode)
-            if isinstance(plan, str):
-                bot.send_message(message.chat.id, plan, message_thread_id=message.message_thread_id)
-                return
-            store_pending(message.from_user.id, plan)
-            markup = InlineKeyboardMarkup()
-            if plan.get("available_new"):
-                markup.row(
-                    InlineKeyboardButton("✅ Ya, simpan", callback_data="agent_fill_confirm"),
-                    InlineKeyboardButton("❌ Batal", callback_data="agent_fill_cancel"),
-                )
-            bot.send_message(
-                message.chat.id,
-                format_plan(plan),
-                parse_mode='Markdown',
-                reply_markup=markup if plan.get("available_new") else None,
-                message_thread_id=message.message_thread_id,
-            )
+            _send_action_plan(message, plan)
             return
         if intent == "leave" and is_leave_request(pertanyaan):
             plan = build_action_plan(pertanyaan, message.from_user.id, message.from_user.first_name, message.from_user.username, "leave")
-            if isinstance(plan, str):
-                bot.send_message(message.chat.id, plan, message_thread_id=message.message_thread_id)
-                return
-            store_pending(message.from_user.id, plan)
-            markup = InlineKeyboardMarkup()
-            if plan.get("available_new"):
-                markup.row(
-                    InlineKeyboardButton("✅ Ya, simpan", callback_data="agent_fill_confirm"),
-                    InlineKeyboardButton("❌ Batal", callback_data="agent_fill_cancel"),
-                )
-            bot.send_message(
-                message.chat.id,
-                format_plan(plan),
-                parse_mode='Markdown',
-                reply_markup=markup if plan.get("available_new") else None,
-                message_thread_id=message.message_thread_id,
-            )
+            _send_action_plan(message, plan)
             return
         if intent == "cancel":
             bot.send_message(message.chat.id, "Gunakan `/batal_jadwal` atau `/batal_cuti` untuk membatalkan jadwal/cuti.", parse_mode='Markdown', message_thread_id=message.message_thread_id)
