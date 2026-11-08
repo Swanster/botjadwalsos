@@ -167,3 +167,32 @@ def test_menu_contains_new_fill_buttons(tmp_path, monkeypatch):
     labels = [label for label, _ in __import__("fake_telebot").button_data(bot.sent[-1]["markup"])]
     assert "Tambah Jadwal" in labels
     assert "Ganti Jadwal" in labels
+
+
+def test_handle_tanya_cancel_flow_removes_after_confirmation(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    db.add_jadwal_manual(500, "Apps User", "apps_user", "2026-11-04")
+    bot = FakeBot()
+    user_handlers.register_user_handlers(bot)
+    agent_handler.register_agent_handlers(bot)
+
+    bot.handlers["tanya"](message(500, "/tanya batal jadwal saya tanggal 4"))
+    assert "Rencana batal jadwal" in bot.sent[-1]["text"]
+
+    assert bot.fire("agent_fill_confirm", 500)
+    rows = [r["tanggal"] for r in db.get_user_jadwal_for_month(500, 2026, 11)]
+    assert rows == []
+
+
+def test_handle_tanya_leave_flow_saves_after_confirmation(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    bot = FakeBot()
+    user_handlers.register_user_handlers(bot)
+    agent_handler.register_agent_handlers(bot)
+
+    bot.handlers["tanya"](message(500, "/tanya cuti tanggal 4"))
+    assert "Rencana cuti" in bot.sent[-1]["text"]
+
+    assert bot.fire("agent_fill_confirm", 500)
+    cuti = db.get_user_absensi_in_range(500, "2026-11-01", "2026-11-30")
+    assert "2026-11-04" in cuti

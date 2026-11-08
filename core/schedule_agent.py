@@ -238,6 +238,149 @@ def build_fill_plan(text: str, user_id: int, first_name: str, username: str, mod
     }
 
 
+def is_cancel_request(text: str) -> bool:
+    q = (text or "").lower()
+    has_cancel = any(verb in q for verb in ("batal", "hapus", "cancel"))
+    has_schedule = any(word in q for word in SCHEDULE_WORDS + ("cuti", "absen"))
+    has_date = bool(re.search(r"\d", q)) and ("tanggal" in q or "tgl" in q or bool(re.search(r"\d+[,/\s-]\d+", q)))
+    return has_cancel and has_schedule and has_date
+
+
+def is_leave_request(text: str) -> bool:
+    q = (text or "").lower()
+    has_leave = any(word in q for word in ("cuti", "absen", "tidak tersedia"))
+    has_date = bool(re.search(r"\d", q)) and ("tanggal" in q or "tgl" in q or bool(re.search(r"\d+[,/\s-]\d+", q)))
+    return has_leave and has_date
+
+
+def _build_cancel_plan(text: str, user_id: int, first_name: str, username: str) -> dict | str:
+    days = _extract_days(text)
+    if not days:
+        return "Saya tidak menemukan tanggal yang valid. Contoh: `/tanya batal jadwal saya tanggal 4, 5`."
+
+    open_months = db.get_bulan_dibuka_list()
+    if not open_months:
+        return "Saat ini tidak ada periode jadwal yang sedang dibuka. Hubungi admin."
+
+    resolved = _resolve_open_month(text, open_months)
+    if resolved is None:
+        month_num = _parse_month_number(text)
+        if month_num is not None:
+            return f"Bulan {NAMA_BULAN[month_num]} tidak sedang dibuka. Hubungi admin."
+        return "Tidak ada periode jadwal yang cocok. Hubungi admin."
+    year, month = resolved
+
+    max_day = calendar.monthrange(year, month)[1]
+    invalid_days = [day for day in days if day > max_day]
+    if invalid_days:
+        return f"Tanggal {', '.join(str(d) for d in invalid_days)} tidak valid untuk {NAMA_BULAN[month]} {year}."
+
+    group_name = db.get_user_group(user_id)
+    if not group_name:
+        return "❌ Akun Anda belum terdaftar di grup mana pun. Silakan hubungi admin."
+
+    existing = {row["tanggal"] if isinstance(row, dict) else row[0] for row in db.get_user_jadwal_for_month(user_id, year, month)}
+    selected = []
+    for day in sorted(set(days)):
+        date_str = f"{year:04d}-{month:02d}-{day:02d}"
+        if date_str in existing and date_str not in selected:
+            selected.append(date_str)
+
+    not_found = [f"{year:04d}-{month:02d}-{day:02d}" for day in sorted(set(days)) if f"{year:04d}-{month:02d}-{day:02d}" not in existing]
+    if not selected:
+        return "Tidak ada jadwal yang dipilih untuk dibatalkan."
+
+    return {
+        "user_id": user_id,
+        "first_name": first_name or "User",
+        "username": username or "",
+        "mode": "cancel_jadwal",
+        "year": year,
+        "month": month,
+        "dates": selected,
+        "available_new": selected,
+        "skipped": [],
+        "unavailable": not_found,
+        "existing": sorted(existing),
+    }
+
+
+def _build_leave_plan(text: str, user_id: int, first_name: str, username: str) -> dict | str:
+    days = _extract_days(text)
+    if not days:
+        return "Saya tidak menemukan tanggal yang valid. Contoh: `/tanya cuti tanggal 4, 5`."
+
+    open_months = db.get_bulan_dibuka_list()
+    if not open_months:
+        today = db.today_wita()
+        open_months = [{"tahun": today.year, "bulan": today.month}]
+
+    resolved = _resolve_open_month(text, open_months)
+    if resolved is None:
+        month_num = _parse_month_number(text)
+        if month_num is not None:
+            return f"Bulan {NAMA_BULAN[month_num]} tidak sedang dibuka. Hubungi admin."
+        return "Tidak ada periode jadwal yang cocok. Hubungi admin."
+    year, month = resolved
+
+    max_day = calendar.monthrange(year, month)[1]
+    invalid_days = [day for day in days if day > max_day]
+    if invalid_days:
+        return f"Tanggal {', '.join(str(d) for d in invalid_days)} tidak valid untuk {NAMA_BULAN[month]} {year}."
+
+    group_name = db.get_user_group(user_id)
+    if not group_name:
+        return "❌ Akun Anda belum terdaftar di grup mana pun. Silakan hubungi admin."
+
+    start_of_month = f"{year:04d}-{month:02d}-01"
+    end_of_month = f"{year:04d}-{month:02d}-{max_day:02d}"
+    existing = db.get_user_absensi_in_range(user_id, start_of_month, end_of_month)
+
+    to_add = []
+    skipped = []
+    for day in sorted(set(days)):
+        date_str = f"{year:04d}-{month:02d}-{day:02d}"
+        if date_str in existing:
+            skipped.append(date_str)
+        else:
+            to_add.append(date_str)
+
+    if not to_add and not skipped:
+        return "Semua tanggal yang diminta tidak tersedia (penuh)."
+
+    combined = sorted(existing | set(to_add))
+    return {
+        "user_id": user_id,
+        "first_name": first_name or "User",
+        "username": username or "",
+        "mode": "leave",
+        "year": year,
+        "month": month,
+        "dates": combined,
+        "available_new": to_add,
+        "skipped": skipped,
+        "unavailable": [],
+        "existing": sorted(existing),
+    }
+
+
+def build_action_plan(text: str, user_id: int, first_name: str, username: str, mode: str = "add"):
+    if mode in ("add", "replace"):
+        return build_fill_plan(text, user_id, first_name, username, mode)
+    if mode == "cancel_jadwal":
+        return _build_cancel_plan(text, user_id, first_name, username)
+    if mode == "leave":
+        return _build_leave_plan(text, user_id, first_name, username)
+    if mode == "cancel_cuti":
+        # Reuse leave parser but remove selected dates from existing cuti.
+        base = _build_leave_plan(text, user_id, first_name, username)
+        if isinstance(base, str):
+            return base
+        base["mode"] = "cancel_cuti"
+        base["dates"] = [d for d in base.get("available_new", []) if d in base.get("existing", [])]
+        base["available_new"] = base["dates"]
+        return base
+    return "Mode aksi tidak dikenal."
 def store_pending(user_id: int, plan: dict) -> None:
     stored = dict(plan)
     stored["created_at"] = time.time()
@@ -264,6 +407,10 @@ def format_plan(plan: dict) -> str:
     mode = plan.get("mode", "add")
     if mode == "replace":
         title = f"📋 *Rencana ganti jadwal* — {NAMA_BULAN[month]} {year}"
+    elif mode == "cancel_jadwal":
+        title = f"📋 *Rencana batal jadwal* — {NAMA_BULAN[month]} {year}"
+    elif mode in ("leave", "cancel_cuti"):
+        title = f"📋 *Rencana cuti* — {NAMA_BULAN[month]} {year}"
     else:
         title = f"📋 *Rencana isi jadwal* — {NAMA_BULAN[month]} {year}"
     lines = [title, ""]
