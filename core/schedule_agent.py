@@ -364,6 +364,64 @@ def _build_leave_plan(text: str, user_id: int, first_name: str, username: str) -
     }
 
 
+def _build_cancel_cuti_plan(text: str, user_id: int, first_name: str, username: str) -> dict | str:
+    days = _extract_days(text)
+    if not days:
+        return "Saya tidak menemukan tanggal yang valid. Contoh: `/tanya batal cuti saya tanggal 4, 5`."
+
+    open_months = db.get_bulan_dibuka_list()
+    if not open_months:
+        today = db.today_wita()
+        open_months = [{"tahun": today.year, "bulan": today.month}]
+
+    resolved = _resolve_open_month(text, open_months)
+    if resolved is None:
+        month_num = _parse_month_number(text)
+        if month_num is not None:
+            return f"Bulan {NAMA_BULAN[month_num]} tidak sedang dibuka. Hubungi admin."
+        return "Tidak ada periode jadwal yang cocok. Hubungi admin."
+    year, month = resolved
+
+    max_day = calendar.monthrange(year, month)[1]
+    invalid_days = [day for day in days if day > max_day]
+    if invalid_days:
+        return f"Tanggal {', '.join(str(d) for d in invalid_days)} tidak valid untuk {NAMA_BULAN[month]} {year}."
+
+    group_name = db.get_user_group(user_id)
+    if not group_name:
+        return "❌ Akun Anda belum terdaftar di grup mana pun. Silakan hubungi admin."
+
+    start_of_month = f"{year:04d}-{month:02d}-01"
+    end_of_month = f"{year:04d}-{month:02d}-{max_day:02d}"
+    existing = db.get_user_absensi_in_range(user_id, start_of_month, end_of_month)
+
+    selected = []
+    not_found = []
+    for day in sorted(set(days)):
+        date_str = f"{year:04d}-{month:02d}-{day:02d}"
+        if date_str in existing:
+            selected.append(date_str)
+        else:
+            not_found.append(date_str)
+
+    if not selected:
+        return "Tidak ada cuti yang dipilih untuk dibatalkan."
+
+    return {
+        "user_id": user_id,
+        "first_name": first_name or "User",
+        "username": username or "",
+        "mode": "cancel_cuti",
+        "year": year,
+        "month": month,
+        "dates": selected,
+        "available_new": selected,
+        "skipped": [],
+        "unavailable": not_found,
+        "existing": sorted(existing),
+    }
+
+
 def build_action_plan(text: str, user_id: int, first_name: str, username: str, mode: str = "add"):
     if mode in ("add", "replace"):
         return build_fill_plan(text, user_id, first_name, username, mode)
@@ -372,15 +430,10 @@ def build_action_plan(text: str, user_id: int, first_name: str, username: str, m
     if mode == "leave":
         return _build_leave_plan(text, user_id, first_name, username)
     if mode == "cancel_cuti":
-        # Reuse leave parser but remove selected dates from existing cuti.
-        base = _build_leave_plan(text, user_id, first_name, username)
-        if isinstance(base, str):
-            return base
-        base["mode"] = "cancel_cuti"
-        base["dates"] = [d for d in base.get("available_new", []) if d in base.get("existing", [])]
-        base["available_new"] = base["dates"]
-        return base
+        return _build_cancel_cuti_plan(text, user_id, first_name, username)
     return "Mode aksi tidak dikenal."
+
+
 def store_pending(user_id: int, plan: dict) -> None:
     stored = dict(plan)
     stored["created_at"] = time.time()
