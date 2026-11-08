@@ -171,6 +171,8 @@ class BotManager:
             types.BotCommand("buka_jadwal_bulan", "Membuka periode jadwal"),
             types.BotCommand("tutup_jadwal_bulan", "Menutup periode jadwal"),
             types.BotCommand("statistik", "Melihat statistik jadwal"),
+            types.BotCommand("ringkasan_kuota", "Ringkasan kuota jadwal"),
+            types.BotCommand("tanggal_penuh", "Daftar tanggal penuh"),
             types.BotCommand("export", "Sync manual ke Google Sheets"),
         ]
 

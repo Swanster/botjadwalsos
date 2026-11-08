@@ -10,11 +10,12 @@ from collections import defaultdict
 
 from config import ADMIN_ID, GROUP_CHAT_ID, ALLOWED_TOPIC_ID
 from core.database import (
-    GROUP_NAMES, normalize_group_name,
+    GROUP_NAMES, GROUP_LABELS, normalize_group_name,
     get_bulan_dibuka, get_bulan_dibuka_list, buka_bulan_baru, format_tanggal_indonesia, 
     get_jadwal_for_month, tutup_bulan_aktif, get_user_group, 
     get_user_by_telegram_username, set_user_group, get_all_months_status,
-    get_all_registered_users, today_wita
+    get_all_registered_users, today_wita, get_monthly_limit_for_group, get_daily_limit,
+    get_all_users_in_group, get_user_jadwal_for_month
 )
 from core.google_sheets import get_google_sheets_client, sync_jadwal_to_sheets
 from core.telegram_text import escape_markdown
@@ -301,6 +302,77 @@ def register_admin_handlers(bot: telebot.TeleBot):
 
         except Exception as e:
             bot.reply_to(message, f"Terjadi error saat memproses file: {e}")
+
+    # =============================================================================
+    # COMMAND BARU: /ringkasan_kuota dan /tanggal_penuh
+    # =============================================================================
+    @bot.message_handler(commands=['ringkasan_kuota'])
+    def handle_ringkasan_kuota(message):
+        if not admin_only_private(message):
+            return
+
+        parts = message.text.split()
+        try:
+            if len(parts) == 3:
+                bulan = int(parts[1]); tahun = int(parts[2])
+                if not (1 <= bulan <= 12 and tahun > 2020): raise ValueError
+            else:
+                hari_ini = today_wita(); bulan = hari_ini.month; tahun = hari_ini.year
+        except (ValueError, IndexError):
+            bot.reply_to(message, "Format: `/ringkasan_kuota <bulan> <tahun>` atau `/ringkasan_kuota`", parse_mode='Markdown')
+            return
+
+        lines = [f"📊 *Ringkasan Kuota — {NAMA_BULAN[bulan]} {tahun}*", ""]
+        for group_name in GROUP_NAMES:
+            label = GROUP_LABELS.get(group_name, group_name)
+            target = get_monthly_limit_for_group(group_name)
+            users = get_all_users_in_group(group_name)
+            if not users:
+                continue
+            lines.append(f"*{label}* (target {target} hari/user)")
+            for user in users:
+                total = len(get_user_jadwal_for_month(user['user_id'], tahun, bulan))
+                lines.append(f"- {escape_markdown(user['username'])}: {total}/{target}")
+            lines.append("")
+
+        bot.reply_to(message, "\n".join(lines).strip(), parse_mode='Markdown')
+
+    @bot.message_handler(commands=['tanggal_penuh'])
+    def handle_tanggal_penuh(message):
+        if not admin_only_private(message):
+            return
+
+        parts = message.text.split()
+        try:
+            if len(parts) == 3:
+                bulan = int(parts[1]); tahun = int(parts[2])
+                if not (1 <= bulan <= 12 and tahun > 2020): raise ValueError
+            else:
+                hari_ini = today_wita(); bulan = hari_ini.month; tahun = hari_ini.year
+        except (ValueError, IndexError):
+            bot.reply_to(message, "Format: `/tanggal_penuh <bulan> <tahun>` atau `/tanggal_penuh`", parse_mode='Markdown')
+            return
+
+        jadwal_bulan = get_jadwal_for_month(tahun, bulan)
+        counts = defaultdict(int)
+        for jadwal in jadwal_bulan:
+            tanggal = (jadwal or {}).get("tanggal")
+            if tanggal:
+                counts[tanggal] += 1
+
+        full_dates = sorted(
+            tanggal for tanggal, jumlah in counts.items()
+            if jumlah >= get_daily_limit(tanggal, 1)
+        )
+
+        if not full_dates:
+            bot.reply_to(message, f"Tidak ada tanggal penuh pada {NAMA_BULAN[bulan]} {tahun}.")
+            return
+
+        lines = [f"🗓️ *Tanggal penuh — {NAMA_BULAN[bulan]} {tahun}*", ""]
+        for tanggal in full_dates:
+            lines.append(f"- {format_tanggal_indonesia(datetime.strptime(tanggal, '%Y-%m-%d').date())}")
+        bot.reply_to(message, "\n".join(lines), parse_mode='Markdown')
 
     # =============================================================================
     # COMMAND BARU: /export - Sync manual ke Google Sheets
