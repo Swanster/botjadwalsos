@@ -4,7 +4,7 @@ import re
 from datetime import date, timedelta
 
 from core.database import format_tanggal_indonesia, get_jadwal_for_specific_date, get_all_absensi_in_range, today_wita
-from core.holidays import format_holidays_month, holidays_in_month
+from core.holidays import available_years, format_holidays_month, holidays_in_month
 
 SCOPE_MSG = (
     "Saya hanya bisa membantu jadwal SOS/standby tim. "
@@ -12,7 +12,34 @@ SCOPE_MSG = (
 )
 
 
+MONTH_NAME_MAP = {
+    "januari": 1, "februari": 2, "maret": 3, "april": 4, "mei": 5, "juni": 6,
+    "juli": 7, "agustus": 8, "september": 9, "oktober": 10, "november": 11, "desember": 12,
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6, "jul": 7, "agu": 8, "ags": 8,
+    "sep": 9, "okt": 10, "nov": 11, "des": 12,
+}
 HARI_MAP_ID = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'Sabtu', 6: 'Minggu'}
+
+
+def resolve_holiday_target(q: str, today: date) -> tuple[int, int]:
+    y = today.year
+    m = today.month
+    ym = re.search(r"\b(20\d{2})\b", q)
+    if ym:
+        y = int(ym.group(1))
+    month_found = None
+    for name, num in MONTH_NAME_MAP.items():
+        if re.search(rf"\b{name}\b", q):
+            month_found = num
+            break
+    if month_found is not None:
+        m = month_found
+    elif "bulan depan" in q or "next month" in q:
+        if m == 12:
+            y, m = y + 1, 1
+        else:
+            m += 1
+    return y, m
 
 SCHEDULE_KEYWORDS = ("sos", "jadwal", "standby", "piket", "shift", "cuti", "tukar", "bertugas", "jaga", "kosong", "libur", "holiday", "tanggal merah")
 
@@ -127,12 +154,9 @@ def answer_question(question: str, today: date | None = None) -> str:
             f"- {HARI_MAP_ID[d.weekday()]}, {format_tanggal_indonesia(d)}" for d in days
         )
     if "libur" in q or "holiday" in q or "tanggal merah" in q:
-        y, m = today.year, today.month
-        if "bulan depan" in q or "next month" in q:
-            if m == 12:
-                y, m = y + 1, 1
-            else:
-                m += 1
+        y, m = resolve_holiday_target(q, today)
+        if y not in available_years():
+            return f"Data libur untuk tahun {y} belum tersedia (tersedia: {', '.join(map(str, available_years()))})."
         return format_holidays_month(y, m)
 
     # Default: tawarkan bantuan ruang lingkup.

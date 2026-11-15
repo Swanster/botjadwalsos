@@ -12,8 +12,9 @@ import requests
 import config
 from core import database as db
 from core.database import format_tanggal_indonesia, get_jadwal_for_specific_date, today_wita
-from core.schedule_query import HARI_MAP_ID, answer_question, is_schedule_question
+from core.schedule_query import HARI_MAP_ID, answer_question, is_schedule_question, resolve_holiday_target
 from core.schedule_context import build_rich_context
+from core.holidays import available_years, format_holidays_month
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,12 @@ def _load_persona() -> str:
 
 def llm_answer(question: str, today: date | None = None, user_id: int | None = None) -> str:
     context = build_rich_context(today) if is_schedule_question(question) else "Tidak ada konteks jadwal yang diperlukan untuk pertanyaan ini."
+    if "libur" in (question or "").lower() or "holiday" in (question or "").lower() or "tanggal merah" in (question or "").lower():
+        y, m = resolve_holiday_target(question, today or today_wita())
+        if y in available_years():
+            context = (context or "") + "\n\n" + format_holidays_month(y, m)
+        else:
+            context = (context or "") + f"\n\nData libur untuk tahun {y} belum tersedia (tersedia: {', '.join(map(str, available_years()))})."
     persona = _load_persona()
     system_content = SYSTEM_PROMPT
     if persona:
