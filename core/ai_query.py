@@ -14,7 +14,14 @@ from core import database as db
 from core.database import format_tanggal_indonesia, get_jadwal_for_specific_date, today_wita
 from core.schedule_query import HARI_MAP_ID, answer_question, is_schedule_question, resolve_holiday_target
 from core.schedule_context import build_rich_context
-from core.holidays import available_years, format_holidays_month
+from core.holidays import format_holidays_month
+try:
+    from core.holidays import available_years
+except (ImportError, AttributeError):
+    from core.holidays import _HOLIDAY_MAP
+
+    def available_years():
+        return sorted(int(y) for y in _HOLIDAY_MAP.keys())
 
 logger = logging.getLogger(__name__)
 

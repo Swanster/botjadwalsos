@@ -4,7 +4,14 @@ import re
 from datetime import date, timedelta
 
 from core.database import format_tanggal_indonesia, get_jadwal_for_specific_date, get_all_absensi_in_range, today_wita
-from core.holidays import available_years, format_holidays_month, holidays_in_month
+from core.holidays import format_holidays_month, holidays_in_month
+try:
+    from core.holidays import available_years
+except (ImportError, AttributeError):
+    from core.holidays import _HOLIDAY_MAP
+
+    def available_years():
+        return sorted(int(y) for y in _HOLIDAY_MAP.keys())
 
 SCOPE_MSG = (
     "Saya hanya bisa membantu jadwal SOS/standby tim. "
