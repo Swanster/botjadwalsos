@@ -1,8 +1,9 @@
 """Pertanyaan jadwal SOS (natural language ringan) — ruang lingkup terbatas."""
 
+import re
 from datetime import date, timedelta
 
-from core.database import format_tanggal_indonesia, get_jadwal_for_specific_date, today_wita
+from core.database import format_tanggal_indonesia, get_jadwal_for_specific_date, get_all_absensi_in_range, today_wita
 
 SCOPE_MSG = (
     "Saya hanya bisa membantu jadwal SOS/standby tim. "
@@ -59,6 +60,34 @@ def week_schedule(start: date) -> str:
     return "\n".join(lines)
 
 
+def _cuti_on_date(date_obj: date) -> str:
+    rows = get_all_absensi_in_range(date_obj.strftime("%Y-%m-%d"), date_obj.strftime("%Y-%m-%d")) or []
+    names = [r.get("username") if isinstance(r, dict) else None for r in rows]
+    names = [n for n in names if n]
+    if not names:
+        return f"Tidak ada yang cuti pada {format_tanggal_indonesia(date_obj)} ({HARI_MAP_ID[date_obj.weekday()]})."
+    return f"Cuti pada {format_tanggal_indonesia(date_obj)} ({HARI_MAP_ID[date_obj.weekday()]}): {', '.join(names)}."
+
+
+def _resolve_target_date(q: str, today: date) -> date | None:
+    if "lusa" in q:
+        return today + timedelta(days=2)
+    if "besok" in q:
+        return today + timedelta(days=1)
+    if "kemarin" in q:
+        return today - timedelta(days=1)
+    if "hari ini" in q or "today" in q:
+        return today
+    m = re.search(r"tanggal\s+(\d{1,2})", q)
+    if m:
+        day = int(m.group(1))
+        try:
+            return date(today.year, today.month, day)
+        except ValueError:
+            return None
+    return None
+
+
 def answer_question(question: str, today: date | None = None) -> str:
     if today is None:
         today = today_wita()
@@ -69,10 +98,23 @@ def answer_question(question: str, today: date | None = None) -> str:
     if any(k in q for k in off_topic):
         return SCOPE_MSG
 
+    target_date = _resolve_target_date(q, today)
+    if target_date is not None and ("sos" in q or "standby" in q or "jadwal" in q or "bertugas" in q or "jaga" in q or "siapa" in q):
+        return who_on_date(target_date)
+
+    if "cuti" in q or "absen" in q:
+        if target_date is not None:
+            return _cuti_on_date(target_date)
+        return _cuti_on_date(today)
+
     if "besok" in q:
         return who_on_date(today + timedelta(days=1))
     if "hari ini" in q or "today" in q:
         return who_on_date(today)
+    if "lusa" in q:
+        return who_on_date(today + timedelta(days=2))
+    if "kemarin" in q:
+        return who_on_date(today - timedelta(days=1))
     if "minggu ini" in q or "pekan ini" in q:
         start = today - timedelta(days=today.weekday())
         return "Jadwal SOS minggu ini:\n" + week_schedule(start)

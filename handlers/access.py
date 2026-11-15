@@ -56,7 +56,17 @@ def deny_unregistered(bot, chat_id, user_id, thread_id=None):
 def deny_private_callback(bot, call):
     """Tolak callback dari chat pribadi non-admin atau user yang belum terdaftar."""
     chat = getattr(call.message, 'chat', None)
-    if private_denied(getattr(chat, 'type', None), call.from_user.id):
+    chat_type = getattr(chat, 'type', None)
+    chat_id = getattr(chat, 'id', None)
+    # Hanya grup yang terdaftar di .env yang boleh memakai bot.
+    import config
+    if chat_type in ('group', 'supergroup') and chat_id is not None and chat_id not in (config.GROUP_CHAT_ID, -100):
+        try:
+            bot.answer_callback_query(call.id, "Bot hanya aktif di grup yang terdaftar.", show_alert=True)
+        except Exception:
+            pass
+        return True
+    if private_denied(chat_type, call.from_user.id):
         bot.answer_callback_query(call.id, DENIED_PRIVATE_TEXT, show_alert=True)
         return True
     chat_id = getattr(chat, 'id', None)

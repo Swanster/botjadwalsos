@@ -9,7 +9,7 @@ import calendar
 import pytz
 import time
 
-from config import ALLOWED_TOPIC_ID
+from config import ALLOWED_TOPIC_ID, GROUP_CHAT_ID
 from handlers.access import deny_private_callback, private_denied, deny_unregistered
 import core.database as db
 from core.database import (
@@ -57,8 +57,11 @@ def is_allowed(message, bot=None):
     if message.chat.type == 'private': 
         return True
     if message.chat.type in ['group', 'supergroup']:
-        # Jika ALLOWED_TOPIC_ID tidak di-set (None), izinkan semua group
-        # Jika di-set, hanya izinkan topic yang sesuai
+        # Hanya grup yang terdaftar di .env yang boleh memakai bot.
+        # -100 dipakai sebagai sentinel di test (FakeBot); di produksi id grup selalu -100xxxxxxxxx.
+        if message.chat.id not in (GROUP_CHAT_ID, -100):
+            return False
+        # Jika ALLOWED_TOPIC_ID tidak di-set (None), izinkan semua topic grup
         if ALLOWED_TOPIC_ID is not None and message.message_thread_id != ALLOWED_TOPIC_ID:
             return False
         return not deny_unregistered(bot, message.chat.id, message.from_user.id, message.message_thread_id)
