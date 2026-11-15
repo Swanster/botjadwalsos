@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import re
 import time
 from datetime import date, timedelta
@@ -9,6 +10,7 @@ from datetime import date, timedelta
 import requests
 
 import config
+from core import database as db
 from core.database import format_tanggal_indonesia, get_jadwal_for_specific_date, today_wita
 from core.schedule_query import HARI_MAP_ID, answer_question, is_schedule_question
 from core.schedule_context import build_rich_context
@@ -128,15 +130,33 @@ def _post_chat(payload: dict) -> dict:
         ) from None
 
 
-def llm_answer(question: str, today: date | None = None) -> str:
+def _load_persona() -> str:
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for name in ("persona.md", "SOUL.md"):
+        path = os.path.join(base, name)
+        try:
+            with open(path, encoding="utf-8") as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            continue
+    return ""
+
+
+def llm_answer(question: str, today: date | None = None, user_id: int | None = None) -> str:
     context = build_rich_context(today) if is_schedule_question(question) else "Tidak ada konteks jadwal yang diperlukan untuk pertanyaan ini."
+    persona = _load_persona()
+    system_content = SYSTEM_PROMPT
+    if persona:
+        system_content = persona + "\n\n" + SYSTEM_PROMPT
+    messages = [{"role": "system", "content": system_content}]
+    if user_id is not None:
+        for m in db.get_tanya_memory(user_id, 8):
+            messages.append({"role": m["role"], "content": m["content"]})
+    messages.append({"role": "user", "content": f"KONTEKS:\n{context}\n\nPERTANYAAN: {question}"})
     payload = {
         "model": config.AI_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"KONTEKS:\n{context}\n\nPERTANYAAN: {question}"},
-        ],
-        "temperature": 0,
+        "messages": messages,
+        "temperature": 0.3,
         "max_tokens": 600,
     }
     data = _post_chat(payload)
@@ -147,7 +167,7 @@ def llm_answer(question: str, today: date | None = None) -> str:
     return content
 
 
-def answer(question: str, today: date | None = None) -> str:
+def answer(question: str, today: date | None = None, user_id: int | None = None) -> str:
     """Jawab pertanyaan aman dengan LLM; pertanyaan jadwal punya fallback deterministik."""
     q = (question or "").strip()
     if not q:
@@ -160,7 +180,14 @@ def answer(question: str, today: date | None = None) -> str:
         return answer_question(q, today) if is_schedule_question(q) else AI_UNAVAILABLE_MSG
     for attempt in range(2):
         try:
-            return llm_answer(q, today)
+            result = llm_answer(q, today, user_id)
+            if user_id is not None:
+                try:
+                    db.add_tanya_memory(user_id, "user", q)
+                    db.add_tanya_memory(user_id, "assistant", result)
+                except Exception:
+                    pass
+            return result
         except Exception as exc:
             if attempt == 0:
                 logger.warning("LLM /tanya gagal, mencoba ulang sekali: %s", exc)

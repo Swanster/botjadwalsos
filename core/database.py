@@ -189,6 +189,10 @@ def create_tables():
             id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, action TEXT NOT NULL,
             description TEXT, timestamp TEXT NOT NULL
         )''')
+        cur.execute('''CREATE TABLE IF NOT EXISTS tanya_memory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+            role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL
+        )''')
         conn.commit()
     print("Semua tabel (termasuk user_groups, settings, admin_users) berhasil diperiksa/dibuat.")
 
@@ -1367,3 +1371,27 @@ def get_audit_logs(limit=100):
         cur = conn.cursor()
         cur.execute('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?', (limit,))
         return cur.fetchall()
+
+
+def get_tanya_memory(user_id: int, limit: int = 8) -> list[dict]:
+    with connect_db() as conn:
+        rows = conn.execute(
+            "SELECT role, content FROM tanya_memory WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+    return [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
+
+
+def add_tanya_memory(user_id: int, role: str, content: str) -> None:
+    with connect_db() as conn:
+        conn.execute(
+            "INSERT INTO tanya_memory (user_id, role, content, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, role, content, datetime.now(makassar_tz).isoformat()),
+        )
+        conn.commit()
+
+
+def clear_tanya_memory(user_id: int) -> None:
+    with connect_db() as conn:
+        conn.execute("DELETE FROM tanya_memory WHERE user_id = ?", (user_id,))
+        conn.commit()

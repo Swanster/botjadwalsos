@@ -563,7 +563,7 @@ def register_user_handlers(bot: telebot.TeleBot):
         if intent == "swap":
             bot.send_message(message.chat.id, "Gunakan `/tukar_jadwal` untuk mengajukan pertukaran jadwal.", parse_mode='Markdown', message_thread_id=message.message_thread_id)
             return
-        bot.send_message(message.chat.id, ai_answer(pertanyaan), message_thread_id=message.message_thread_id)
+        bot.send_message(message.chat.id, ai_answer(pertanyaan, user_id=message.from_user.id), message_thread_id=message.message_thread_id)
 
     @bot.message_handler(commands=['cuti'])
     def handle_cuti(message):
