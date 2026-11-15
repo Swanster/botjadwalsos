@@ -4,6 +4,7 @@ import re
 from datetime import date, timedelta
 
 from core.database import format_tanggal_indonesia, get_jadwal_for_specific_date, get_all_absensi_in_range, today_wita
+from core.holidays import format_holidays_month, holidays_in_month
 
 SCOPE_MSG = (
     "Saya hanya bisa membantu jadwal SOS/standby tim. "
@@ -13,7 +14,7 @@ SCOPE_MSG = (
 
 HARI_MAP_ID = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'Sabtu', 6: 'Minggu'}
 
-SCHEDULE_KEYWORDS = ("sos", "jadwal", "standby", "piket", "shift", "cuti", "tukar", "bertugas", "jaga", "kosong")
+SCHEDULE_KEYWORDS = ("sos", "jadwal", "standby", "piket", "shift", "cuti", "tukar", "bertugas", "jaga", "kosong", "libur", "holiday", "tanggal merah")
 
 
 def is_schedule_question(question: str) -> bool:
@@ -125,5 +126,14 @@ def answer_question(question: str, today: date | None = None) -> str:
         return "Hari yang belum ada yang SOS (14 hari ke depan):\n" + "\n".join(
             f"- {HARI_MAP_ID[d.weekday()]}, {format_tanggal_indonesia(d)}" for d in days
         )
+    if "libur" in q or "holiday" in q or "tanggal merah" in q:
+        y, m = today.year, today.month
+        if "bulan depan" in q or "next month" in q:
+            if m == 12:
+                y, m = y + 1, 1
+            else:
+                m += 1
+        return format_holidays_month(y, m)
+
     # Default: tawarkan bantuan ruang lingkup.
     return SCOPE_MSG

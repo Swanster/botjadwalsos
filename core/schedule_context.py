@@ -10,12 +10,14 @@ from core.database import (
     today_wita,
 )
 from core.schedule_query import HARI_MAP_ID, empty_days, week_schedule
+from core.holidays import format_holidays_month
 
 
 def build_rich_context(today=None) -> str:
     if today is None:
         today = today_wita()
     lines = [f"Hari ini: {format_tanggal_indonesia(today)} ({HARI_MAP_ID[today.weekday()]})."]
+    lines.append(f"Bulan ini: {today.month:02d}/{today.year}.")
     lines.append("Minggu ini:")
     lines.append(week_schedule(today))
     lines.append("Tanggal ISO: " + ", ".join((today + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(14)))
@@ -37,4 +39,6 @@ def build_rich_context(today=None) -> str:
             lines.append(f"- {r['tanggal']}: {r['username']}")
     else:
         lines.append("Cuti aktif 14 hari ke depan: tidak ada.")
+    lines.append("Libur Indonesia bulan ini:")
+    lines.append(format_holidays_month(today.year, today.month))
     return "\n".join(lines)
