@@ -1,4 +1,4 @@
-"""User grup yang belum terdaftar harus dapat penjelasan, bukan menu jadwal."""
+"""Anggota grup terpilih boleh memakai fitur umum tanpa member dashboard."""
 import os
 import sys
 
@@ -9,7 +9,7 @@ sys.path.insert(0, ROOT)
 
 import config
 from core import database as db
-from handlers import access, user_handlers
+from handlers import user_handlers
 from fake_telebot import FakeBot, message
 
 MEMBER = 500
@@ -21,6 +21,8 @@ def _setup(tmp_path, monkeypatch):
     db_path = str(tmp_path / "unregistered.sqlite")
     monkeypatch.setattr(config, "DB_NAME", db_path)
     monkeypatch.setattr(db, "DB_NAME", db_path)
+    monkeypatch.setattr(config, "GROUP_CHAT_ID", -999)
+    monkeypatch.setattr(config, "ALLOWED_TOPIC_ID", None)
     monkeypatch.setattr(user_handlers, "ALLOWED_TOPIC_ID", None)
 
     db.create_tables()
@@ -36,14 +38,12 @@ def _bot():
     return bot
 
 
-def test_lihat_jadwal_menjelaskan_user_belum_terdaftar():
+def test_lihat_jadwal_dapat_dipakai_user_grup_yang_belum_terdaftar():
     bot = _bot()
 
     bot.handlers["lihat_jadwal"](message(OTHER, "/lihat_jadwal"))
 
-    assert len(bot.sent) == 1
-    assert bot.sent[0]["text"] == access.UNREGISTERED_TEXT
-    assert "/lihat_jadwal" in bot.sent[0]["text"]
+    assert bot.sent
 
 
 def test_lihat_jadwal_tetap_jalan_untuk_user_terdaftar():
@@ -52,28 +52,22 @@ def test_lihat_jadwal_tetap_jalan_untuk_user_terdaftar():
     bot.handlers["lihat_jadwal"](message(MEMBER, "/lihat_jadwal"))
 
     assert len(bot.sent) == 1
-    assert bot.sent[0]["text"] != access.UNREGISTERED_TEXT
+    assert bot.sent[0]["text"]
 
 
-def test_tanya_user_belum_terdaftar_tidak_memanggil_llm(monkeypatch):
-    from core import ai_query
-
-    monkeypatch.setattr(
-        ai_query, "_post_chat",
-        lambda payload: (_ for _ in ()).throw(AssertionError("LLM tidak boleh dipanggil")),
-    )
+def test_tanya_user_grup_yang_belum_terdaftar_dapat_dipakai(monkeypatch):
+    monkeypatch.setattr(user_handlers, "ai_answer", lambda question, user_id=None: "jawaban bot")
     bot = _bot()
 
     bot.handlers["tanya"](message(OTHER, "/tanya siapa yang SOS besok?"))
 
-    assert bot.sent[0]["text"] == access.UNREGISTERED_TEXT
+    assert bot.sent[0]["text"] == "jawaban bot"
 
 
-def test_callback_rekap_user_belum_terdaftar_ditolak():
+def test_callback_rekap_user_grup_yang_belum_terdaftar_diizinkan():
     bot = _bot()
 
     handled = bot.fire("view_rekap_2026_11", OTHER, chat_type="supergroup")
 
     assert handled is True
-    assert bot.edits == []
-    assert bot.sent[0]["text"] == access.UNREGISTERED_TEXT
+    assert bot.edits

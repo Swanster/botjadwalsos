@@ -9,8 +9,8 @@ import calendar
 import pytz
 import time
 
-from config import ALLOWED_TOPIC_ID, GROUP_CHAT_ID
-from handlers.access import deny_private_callback, private_denied, deny_unregistered
+from config import ALLOWED_TOPIC_ID
+from handlers.access import deny_private_callback, message_allowed
 import core.database as db
 from core.database import (
     get_bulan_dibuka, get_bulan_dibuka_list, get_konfigurasi, get_jadwal_for_month,
@@ -47,25 +47,8 @@ HARI_MAP_ID = {0: 'Senin', 1: 'Selasa', 2: 'Rabu', 3: 'Kamis', 4: 'Jumat', 5: 'S
 EMOJI_HARI = {'Senin':'🌞','Selasa':'📘','Rab':'📗','Kamis':'📙','Jumat':'📕','Sabtu':'🎉','Minggu':'🛌'}
 
 def is_allowed(message, bot=None):
-    """Cek apakah message berasal dari chat yang diizinkan dan user terdaftar.
-
-    Chat pribadi: hanya admin (ADMIN_ID). Anggota tim memakai grup/topik.
-    Grup: user harus ada di user_groups; bila belum, bot mengirim penjelasan.
-    """
-    if private_denied(message.chat.type, message.from_user.id):
-        return False
-    if message.chat.type == 'private': 
-        return True
-    if message.chat.type in ['group', 'supergroup']:
-        # Hanya grup yang terdaftar di .env yang boleh memakai bot.
-        # -100 dipakai sebagai sentinel di test (FakeBot); di produksi id grup selalu -100xxxxxxxxx.
-        if message.chat.id not in (GROUP_CHAT_ID, -100):
-            return False
-        # Jika ALLOWED_TOPIC_ID tidak di-set (None), izinkan semua topic grup
-        if ALLOWED_TOPIC_ID is not None and message.message_thread_id != ALLOWED_TOPIC_ID:
-            return False
-        return not deny_unregistered(bot, message.chat.id, message.from_user.id, message.message_thread_id)
-    return False
+    """Hanya admin boleh DM; anggota grup/topik terpilih dapat memakai bot."""
+    return message_allowed(message, ALLOWED_TOPIC_ID)
 
 def get_hari_from_date(date_str: str) -> str:
     """Dapatkan nama hari dari string tanggal YYYY-MM-DD."""
