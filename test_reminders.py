@@ -21,8 +21,22 @@ def _setup(tmp_path, monkeypatch):
 
 def test_find_empty_dates_detects_days(tmp_path, monkeypatch):
     _setup(tmp_path, monkeypatch)
+    today = date(2026, 11, 25)
+    monkeypatch.setattr(reminders, "today_wita", lambda: today)
+    db.buka_bulan_baru(today.year, today.month)
     dates = reminders.find_empty_dates(3)
     assert len(dates) == 3
+
+
+def test_find_empty_dates_ignores_unopened_next_month(tmp_path, monkeypatch):
+    _setup(tmp_path, monkeypatch)
+    today = date(2026, 11, 25)
+    monkeypatch.setattr(reminders, "today_wita", lambda: today)
+    db.buka_bulan_baru(today.year, today.month)
+
+    dates = reminders.find_empty_dates(14)
+
+    assert dates == [date(2026, 11, day) for day in range(25, 31)]
 
 
 def test_reminder_disabled_does_not_send(tmp_path, monkeypatch):

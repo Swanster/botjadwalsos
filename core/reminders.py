@@ -5,7 +5,7 @@ import os
 from datetime import date
 
 from config import ALLOWED_TOPIC_ID, GROUP_CHAT_ID
-from core.database import today_wita
+from core.database import get_bulan_dibuka_list, today_wita
 from core.schedule_query import empty_days
 
 
@@ -14,7 +14,11 @@ _SENT_REMINDER_DAYS: set[date] = set()
 
 def find_empty_dates(days: int = 14) -> list[date]:
     today = today_wita()
-    return empty_days(today, days)
+    opened_months = {(month["tahun"], month["bulan"]) for month in get_bulan_dibuka_list()}
+    return [
+        d for d in empty_days(today, days)
+        if (d.year, d.month) in opened_months
+    ]
 
 
 def build_empty_schedule_warning() -> str:
